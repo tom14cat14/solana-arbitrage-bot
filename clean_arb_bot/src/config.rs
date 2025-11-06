@@ -67,15 +67,78 @@ impl Config {
 }
 
 impl Config {
+    /// Validate URL format (basic security check)
+    fn validate_url(url: &str, name: &str) -> Result<()> {
+        // Check for basic URL structure
+        if !url.starts_with("http://") && !url.starts_with("https://") && !url.starts_with("ws://") && !url.starts_with("wss://") {
+            return Err(anyhow::anyhow!(
+                "Invalid {}: must start with http://, https://, ws://, or wss:// (got: {})",
+                name, url
+            ));
+        }
+
+        // Check for suspicious characters (basic injection protection)
+        if url.contains('\n') || url.contains('\r') || url.contains('\0') {
+            return Err(anyhow::anyhow!(
+                "Invalid {}: contains suspicious characters",
+                name
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Validate base58 wallet private key format
+    fn validate_private_key(key: &str) -> Result<()> {
+        // Check length (Solana private keys are 64 bytes base58 encoded, typically 87-88 chars)
+        if key.len() < 80 || key.len() > 90 {
+            return Err(anyhow::anyhow!(
+                "Invalid wallet private key length: {} (expected 80-90 characters)",
+                key.len()
+            ));
+        }
+
+        // Check for valid base58 characters
+        if !key.chars().all(|c| {
+            matches!(c, '1'..='9' | 'A'..='H' | 'J'..='N' | 'P'..='Z' | 'a'..='k' | 'm'..='z')
+        }) {
+            return Err(anyhow::anyhow!(
+                "Invalid wallet private key: contains non-base58 characters"
+            ));
+        }
+
+        Ok(())
+    }
+
     pub fn from_env() -> Result<Self> {
         // Load .env file
         dotenvy::dotenv().ok();
 
-        let config = Self {
-            shredstream_url: env::var("SHREDSTREAM_SERVICE_URL")
-                .unwrap_or_else(|_| "http://localhost:8080".to_string()),
+        // Load and validate ShredStream URL
+        let shredstream_url = env::var("SHREDSTREAM_SERVICE_URL")
+            .unwrap_or_else(|_| "http://localhost:8080".to_string());
+        Self::validate_url(&shredstream_url, "SHREDSTREAM_SERVICE_URL")?;
 
-            solana_rpc_url: env::var("SOLANA_RPC_URL").ok(),
+        // Load and validate Solana RPC URL if provided
+        let solana_rpc_url = if let Ok(url) = env::var("SOLANA_RPC_URL") {
+            Self::validate_url(&url, "SOLANA_RPC_URL")?;
+            Some(url)
+        } else {
+            None
+        };
+
+        // Load and validate wallet private key if provided
+        let wallet_private_key = if let Ok(key) = env::var("WALLET_PRIVATE_KEY") {
+            Self::validate_private_key(&key)?;
+            Some(key)
+        } else {
+            None
+        };
+
+        let config = Self {
+            shredstream_url,
+
+            solana_rpc_url,
 
             capital_sol: env::var("CAPITAL_SOL")
                 .unwrap_or_else(|_| "2.0".to_string())
@@ -113,7 +176,7 @@ impl Config {
                 .unwrap_or_else(|_| "true".to_string())
                 .to_lowercase() == "true",
 
-            wallet_private_key: env::var("WALLET_PRIVATE_KEY").ok(),
+            wallet_private_key,
 
             jupiter_api_key: env::var("JUPITER_API_KEY").ok(),
         };

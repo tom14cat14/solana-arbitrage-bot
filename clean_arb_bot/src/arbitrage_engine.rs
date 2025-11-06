@@ -21,6 +21,17 @@ use crate::position_tracker::PositionTracker;
 use crate::meteora_swap;  // CYCLE-7: Meteora swap instruction building
 use crate::cost_calculator::ArbitrageCosts;
 
+// Constants for arbitrage detection and execution
+const STALE_OPPORTUNITY_THRESHOLD_MS: u64 = 100;  // Max age before considering stale
+const SHREDSTREAM_TIMEOUT_MS: u64 = 500;  // Timeout for ShredStream price fetch
+const SCAN_INTERVAL_MS: u64 = 1500;  // Scan interval (synced with JITO rate limit)
+const STATS_REPORT_INTERVAL_SECS: u64 = 60;  // Report stats every 60 seconds
+const BALANCE_UPDATE_OPPORTUNITIES: u64 = 50;  // Update balance every 50 opportunities
+const BALANCE_UPDATE_INTERVAL_SECS: u64 = 600;  // Or every 10 minutes
+const MAX_REALISTIC_SPREAD_PCT: f64 = 50.0;  // Max spread for volatile memecoins
+const LOG_SPREAD_THRESHOLD_PCT: f64 = 0.3;  // Log spreads above this threshold
+const MIN_VOLUME_SOL: f64 = 0.01;  // Minimum 24h volume to avoid illiquid tokens
+
 /// Arbitrage opportunity
 #[derive(Debug, Clone)]
 pub struct ArbitrageOpportunity {
@@ -309,11 +320,11 @@ impl ArbitrageEngine {
             // Update stats
             self.stats.runtime_seconds = self.start_time.elapsed().as_secs();
 
-            // Periodically update wallet balance (every 50 opportunities or 10 minutes)
+            // Periodically update wallet balance
             let opportunities_since_update = self.stats.opportunities_detected - opportunities_at_last_update;
             let time_since_update = last_balance_update.elapsed();
 
-            if opportunities_since_update >= 50 || time_since_update >= Duration::from_secs(600) {
+            if opportunities_since_update >= BALANCE_UPDATE_OPPORTUNITIES || time_since_update >= Duration::from_secs(BALANCE_UPDATE_INTERVAL_SECS) {
                 if let (Some(ref rpc), Some(ref wallet)) = (&self.rpc_client, &self.wallet_keypair) {
                     if let Ok(balance_lamports) = rpc.get_balance(&wallet.pubkey()) {
                         let balance_sol = balance_lamports as f64 / 1_000_000_000.0;
@@ -348,10 +359,10 @@ impl ArbitrageEngine {
                 break;
             }
 
-            // HIGH FIX: Fetch prices with 500ms timeout (ShredStream is fast HTTP service)
+            // HIGH FIX: Fetch prices with timeout (ShredStream is fast HTTP service)
             // Solana-optimized: ShredStream should respond in <100ms typically
             match tokio::time::timeout(
-                Duration::from_millis(500),
+                Duration::from_millis(SHREDSTREAM_TIMEOUT_MS),
                 self.shredstream_client.fetch_prices()
             ).await {
                 Ok(Ok(count)) => {
@@ -481,7 +492,8 @@ impl ArbitrageEngine {
 
                 info!("🔺 Triangle Arbitrage Found (ShredStream data)!");
                 info!("   Path: SOL → {} → {} → SOL",
-                    &triangle.token_a_mint[..8], &triangle.token_b_mint[..8]);
+                    triangle.token_a_mint.get(..8).unwrap_or(&triangle.token_a_mint),
+                    triangle.token_b_mint.get(..8).unwrap_or(&triangle.token_b_mint));
                 info!("   DEXs: {} → {} → {}",
                     triangle.dex_1, triangle.dex_2, triangle.dex_3);
                 info!("   Input: {:.6} SOL", triangle.input_amount_sol);
@@ -543,18 +555,18 @@ impl ArbitrageEngine {
                     self.stats.opportunities_detected += 1;
 
                     // NEW (2025-10-11): Early staleness detection (Option 4)
-                    // Skip opportunities older than 100ms to avoid wasting time building instructions
+                    // Skip opportunities older than threshold to avoid wasting time building instructions
                     let age = opportunity.detected_at.elapsed();
-                    if age > Duration::from_millis(100) {
+                    if age > Duration::from_millis(STALE_OPPORTUNITY_THRESHOLD_MS) {
                         warn!("⏰ Skipping stale opportunity (age: {}ms) - would fail simulation anyway",
                               age.as_millis());
                         debug!("   Token: {} - detected {}ms ago, likely stale pool state",
-                               &opportunity.token_mint[..8], age.as_millis());
+                               opportunity.token_mint.get(..8).unwrap_or(&opportunity.token_mint), age.as_millis());
                         continue;  // Skip to next opportunity immediately
                     }
 
                     info!("🎯 Arbitrage opportunity found (age: {}ms):", age.as_millis());
-                    info!("   Token: {}", &opportunity.token_mint[..8]);
+                    info!("   Token: {}", opportunity.token_mint.get(..8).unwrap_or(&opportunity.token_mint));
                     info!("   Buy: {} @ {:.6} SOL", opportunity.buy_dex, opportunity.buy_price);
                     info!("   Sell: {} @ {:.6} SOL", opportunity.sell_dex, opportunity.sell_price);
                     info!("   Spread: {:.2}%", opportunity.spread_percentage);
@@ -578,15 +590,15 @@ impl ArbitrageEngine {
                 }
             }
 
-            // Report stats every 60 seconds
-            if self.stats.runtime_seconds % 60 == 0 && self.stats.runtime_seconds > 0 {
+            // Report stats periodically
+            if self.stats.runtime_seconds % STATS_REPORT_INTERVAL_SECS == 0 && self.stats.runtime_seconds > 0 {
                 self.report_stats();
             }
 
-            // Scan interval synced with JITO rate limit (1.5s)
+            // Scan interval synced with JITO rate limit
             // This ensures each scan produces fresh data that can be submitted immediately
-            // JITO limit: 1 bundle per 1.1s, scan every 1.5s = fresh opportunities
-            sleep(Duration::from_millis(1500)).await;
+            // JITO limit: 1 bundle per 1.1s, scan interval ensures fresh opportunities
+            sleep(Duration::from_millis(SCAN_INTERVAL_MS)).await;
         }
 
         Ok(())
@@ -625,7 +637,7 @@ impl ArbitrageEngine {
         if let Some(ref tokens) = target_tokens {
             info!("🎯 Target token filtering: {} prices (from {} target tokens)",
                   all_prices.len(), tokens.len());
-            debug!("🎯 Target tokens: {:?}", tokens.iter().map(|t| &t[..8.min(t.len())]).collect::<Vec<_>>());
+            debug!("🎯 Target tokens: {:?}", tokens.iter().map(|t| t.get(..8).unwrap_or(t)).collect::<Vec<_>>());
         }
 
         // Group prices by token
@@ -646,10 +658,9 @@ impl ArbitrageEngine {
             // Volume filter - FIXED decimal issue, now re-enabled
             // Check minimum volume to avoid illiquid tokens
             let total_volume_24h: f64 = prices.iter().map(|p| p.volume_24h).sum();
-            const MIN_VOLUME_SOL: f64 = 0.01;  // Reduced to 0.01 SOL to catch more opportunities
             if total_volume_24h < MIN_VOLUME_SOL {
                 debug!("⚠️ Skipping low volume token {}: {:.2} SOL/24h (min: {} SOL)",
-                       &token_mint[..8.min(token_mint.len())], total_volume_24h, MIN_VOLUME_SOL);
+                       token_mint.get(..8).unwrap_or(&token_mint), total_volume_24h, MIN_VOLUME_SOL);
                 continue;
             }
 
@@ -687,17 +698,16 @@ impl ArbitrageEngine {
                     continue; // Skip same-DEX different pools
                 }
 
-                // Log ALL spreads >0.3% for debugging (Grok: find real opportunities)
-                if spread_percentage > 0.3 {
+                // Log ALL spreads above threshold for debugging (Grok: find real opportunities)
+                if spread_percentage > LOG_SPREAD_THRESHOLD_PCT {
                     info!("💡 Found spread: {:.2}% for {} | Buy: {} @ {:.6} | Sell: {} @ {:.6}",
-                        spread_percentage, &token_mint[..8], buy_dex, min_price, sell_dex, max_price);
+                        spread_percentage, token_mint.get(..8).unwrap_or(&token_mint), buy_dex, min_price, sell_dex, max_price);
                 }
 
-                // Grok fix: Raise threshold to 50% for volatile memecoins
-                const MAX_REALISTIC_SPREAD: f64 = 50.0;
-                if spread_percentage > MAX_REALISTIC_SPREAD {
+                // Grok fix: Raise threshold for volatile memecoins
+                if spread_percentage > MAX_REALISTIC_SPREAD_PCT {
                     debug!("⚠️ Rejecting unrealistic spread: {:.2}% for {} ({} @ {:.6} vs {} @ {:.6})",
-                        spread_percentage, &token_mint[..8], buy_dex, min_price, sell_dex, max_price);
+                        spread_percentage, token_mint.get(..8).unwrap_or(&token_mint), buy_dex, min_price, sell_dex, max_price);
                     continue;
                 }
 
@@ -728,7 +738,7 @@ impl ArbitrageEngine {
                     // Log cost breakdown for transparency
                     let (_gas_pct, _tip_pct) = costs.gas_tip_ratio();
                     debug!("✅ PROFITABLE: {} - Spread {:.2}% >= {:.2}% required",
-                           &token_mint[..8], spread_percentage, min_required_spread_percentage);
+                           token_mint.get(..8).unwrap_or(&token_mint), spread_percentage, min_required_spread_percentage);
                     debug!("   Gross: {:.6} SOL, Costs: {:.6} SOL, Net: {:.6} SOL ({:.1}% retention)",
                            gross_profit_sol, costs.total_cost_lamports as f64 / 1e9, net_profit_sol,
                            costs.retention_percentage(gross_profit_lamports));
@@ -753,7 +763,7 @@ impl ArbitrageEngine {
                     });
                 } else {
                     debug!("⚠️ Spread too low: {} - {:.2}% < {:.2}% required (Position: {:.2} SOL, Costs: {:.6} SOL)",
-                           &token_mint[..8], spread_percentage, min_required_spread_percentage,
+                           token_mint.get(..8).unwrap_or(&token_mint), spread_percentage, min_required_spread_percentage,
                            position_size_sol, costs.total_cost_lamports as f64 / 1e9);
                 }
             }
@@ -881,7 +891,7 @@ impl ArbitrageEngine {
                     // Execute buy swap (if Meteora)
                     if is_buy_meteora {
                         info!("💰 Executing BUY on Meteora: {} @ {:.6} SOL",
-                              &opportunity.token_mint[..8], opportunity.buy_price);
+                              opportunity.token_mint.get(..8).unwrap_or(&opportunity.token_mint), opportunity.buy_price);
 
                         match meteora_swap::execute_meteora_swap(
                             rpc_client.clone(),
@@ -908,7 +918,7 @@ impl ArbitrageEngine {
                     // Execute sell swap (if Meteora)
                     if is_sell_meteora {
                         info!("💰 Executing SELL on Meteora: {} @ {:.6} SOL",
-                              &opportunity.token_mint[..8], opportunity.sell_price);
+                              opportunity.token_mint.get(..8).unwrap_or(&opportunity.token_mint), opportunity.sell_price);
 
                         match meteora_swap::execute_meteora_swap(
                             rpc_client.clone(),

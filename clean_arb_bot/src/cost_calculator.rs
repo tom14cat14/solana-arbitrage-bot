@@ -162,6 +162,7 @@ impl ArbitrageCosts {
 
             // Calculate tip with caps, BUT ensure dynamic percentile is ALWAYS the floor
             // This ensures competitive bundle landing appropriate for profit size
+            // Use saturating operations to prevent overflow
             let capped_tip = base_tip.max(min_tip).min(max_tip);
 
             // CRITICAL: Dynamic percentile is ABSOLUTE MINIMUM (never go below it)
@@ -213,11 +214,12 @@ impl ArbitrageCosts {
             0
         };
 
+        // Use saturating_add to prevent overflow
         let total_cost_lamports = dex_fee_lamports
-            + jito_tip_lamports
-            + base_tx_fee_lamports
-            + compute_fee_lamports
-            + priority_fee_lamports;
+            .saturating_add(jito_tip_lamports)
+            .saturating_add(base_tx_fee_lamports)
+            .saturating_add(compute_fee_lamports)
+            .saturating_add(priority_fee_lamports);
 
         // PRODUCTION LOGGING: Complete cost breakdown for monitoring
         let profit_sol = expected_profit_lamports as f64 / 1e9;
@@ -292,8 +294,9 @@ impl ArbitrageCosts {
     }
 
     /// Get net profit after all costs
+    /// Uses checked arithmetic to prevent overflow
     pub fn net_profit(&self, gross_profit_lamports: u64) -> i64 {
-        gross_profit_lamports as i64 - self.total_cost_lamports as i64
+        (gross_profit_lamports as i64).saturating_sub(self.total_cost_lamports as i64)
     }
 
     /// Check if arbitrage is profitable after costs

@@ -1,8 +1,6 @@
 //! Clean Arbitrage Bot - Production MEV Trading System
 //! CYCLE-7: Grok-approved production system (9/10 → 10/10 in progress)
 
-#![allow(dead_code)] // Future features and testing infrastructure
-
 use anyhow::Result;
 use tracing::{info, error};
 use tokio::signal;
