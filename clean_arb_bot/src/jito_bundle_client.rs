@@ -183,7 +183,7 @@ impl JitoBundleClient {
     /// Returns one of the 8 official Jito tip accounts at random
     pub fn get_random_tip_account(&self) -> Pubkey {
         use rand::Rng;
-        self.tip_accounts[rand::rng().random_range(0..self.tip_accounts.len())]
+        self.tip_accounts[rand::thread_rng().gen_range(0..self.tip_accounts.len())]
     }
 
     /// Create new Jito bundle client (legacy - deprecated, use new_with_keypair_ref)
@@ -304,7 +304,7 @@ impl JitoBundleClient {
 
         // Select random tip account for load balancing
         use rand::Rng;
-        let tip_account = self.tip_accounts[rand::rng().random_range(0..self.tip_accounts.len())];
+        let tip_account = self.tip_accounts[rand::thread_rng().gen_range(0..self.tip_accounts.len())];
 
         // CRITICAL FIX: Include tip INSIDE the swap transaction (not as separate transaction)
         // This prevents "unbundling" via uncle blocks where tip executes but swap fails
@@ -414,7 +414,7 @@ impl JitoBundleClient {
 
         let request = BundleSubmissionRequest {
             jsonrpc: "2.0".to_string(),
-            id: rand::rng().random::<u64>(),
+            id: rand::thread_rng().gen::<u64>(),
             method: "sendBundle".to_string(),
             params: vec![bundle.transactions.clone()],  // Double-wrap: [[txs]]
         };
@@ -669,7 +669,7 @@ impl JitoBundleClient {
         use rand::Rng;
         let request = serde_json::json!({
             "jsonrpc": "2.0",
-            "id": rand::rng().random::<u64>(),
+            "id": rand::thread_rng().gen::<u64>(),
             "method": "getBundleStatuses",
             "params": [vec![bundle_id]]
         });

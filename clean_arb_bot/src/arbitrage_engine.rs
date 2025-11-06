@@ -784,7 +784,7 @@ impl ArbitrageEngine {
 
             // Use consistent RNG for paper trading simulation
             use rand::Rng;
-            let success = rand::rng().random_bool(0.9);  // 90% success rate
+            let success = rand::thread_rng().gen_bool(0.9);  // 90% success rate
 
             if success {
                 // Record profit
@@ -1057,7 +1057,7 @@ impl ArbitrageEngine {
 
             // Simulate ~90% success rate (some opportunities will fail due to slippage, MEV, etc.)
             use rand::Rng;
-            let success = rand::rng().random_bool(0.9);
+            let success = rand::thread_rng().gen_bool(0.9);
 
             if success {
                 self.stats.opportunities_executed += 1;
