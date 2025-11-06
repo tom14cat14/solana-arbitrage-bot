@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, Context};
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -182,9 +182,11 @@ impl JupiterTriangleDetector {
 
                 let quote: JupiterQuoteResponse = response.json().await?;
 
-                // Parse amounts
-                let in_amount: u64 = quote.in_amount.parse()?;
-                let out_amount: u64 = quote.out_amount.parse()?;
+                // Parse amounts with error context
+                let in_amount: u64 = quote.in_amount.parse()
+                    .context(format!("Failed to parse Jupiter quote in_amount: {}", quote.in_amount))?;
+                let out_amount: u64 = quote.out_amount.parse()
+                    .context(format!("Failed to parse Jupiter quote out_amount: {}", quote.out_amount))?;
 
                 let input_sol = in_amount as f64 / 1e9;
                 let output_sol = out_amount as f64 / 1e9;
