@@ -1,0 +1,42 @@
+[Unit]
+Description=Clean Arbitrage Bot for Solana
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tom14cat14
+Group=tom14cat14
+WorkingDirectory=/home/tom14cat14/Arb_Bot/clean_arb_bot
+
+# Environment
+Environment="ENABLE_REAL_TRADING=true"
+Environment="PAPER_TRADING=false"
+Environment="RUST_LOG=info"
+Environment="RUST_BACKTRACE=1"
+
+# Main process (manager handles restarts internally)
+ExecStart=/home/tom14cat14/Arb_Bot/clean_arb_bot/production/arb_bot_manager.sh
+ExecStop=/bin/touch /home/tom14cat14/Arb_Bot/clean_arb_bot/.emergency_stop
+
+# Don't restart via systemd (manager handles it)
+Restart=no
+
+# Resource limits
+LimitNOFILE=65536
+MemoryLimit=2G
+CPUQuota=200%
+
+# Security
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/tom14cat14/Arb_Bot/clean_arb_bot
+NoNewPrivileges=true
+
+# Logging
+StandardOutput=append:/home/tom14cat14/Arb_Bot/clean_arb_bot/logs/systemd.log
+StandardError=append:/home/tom14cat14/Arb_Bot/clean_arb_bot/logs/systemd.log
+
+[Install]
+WantedBy=multi-user.target

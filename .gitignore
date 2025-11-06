@@ -1,5 +1,5 @@
 # Rust build artifacts
-/target/
+target/
 **/*.rs.bk
 *.pdb
 
@@ -23,6 +23,11 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Runtime files
+*.pid
+.health
+.restart_count
 
 # Keys and secrets
 *key*
