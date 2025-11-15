@@ -36,9 +36,10 @@ jobs:
           max-allowed-issues: 2147483647
 
       - name: Upload SARIF results to GitHub
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: results.sarif
+          category: codacy-security-scan
 
   codacy-coverage-reporter:
     name: Codacy Coverage Report
@@ -76,11 +77,13 @@ jobs:
 
       - name: Run Rust tests with coverage
         if: hashFiles('**/Cargo.toml') != ''
-        run: cargo tarpaulin --out Xml --output-dir . || true
+        run: |
+          cargo tarpaulin --out Xml --output-dir . || echo "Coverage generation failed, skipping..."
+        continue-on-error: true
 
       # Upload coverage to Codacy
       - name: Upload coverage to Codacy
-        uses: codacy/codacy-coverage-reporter-action@v1
+        uses: codacy/codacy-coverage-reporter-action@v1.3.0
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           coverage-reports: coverage.xml
