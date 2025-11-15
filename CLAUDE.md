@@ -32,6 +32,28 @@
 - ✅ Circuit breakers must be tested
 - **A single bug can cost significant money**
 
+### **5. NEVER Hardcode Secrets - CRITICAL** 🔐
+- ✅ **ALWAYS use .env files** for private keys, API keys, wallet addresses
+- ✅ **ALWAYS verify .gitignore** blocks .env files before committing
+- ✅ **.gitignore must include**: `.env`, `.env.*`, `*.env`, `!.env.example`
+- ✅ **Use .env.example** for documentation (with placeholder values)
+- ❌ **NEVER hardcode** private keys in .md, .rs, .py, .js files
+- ❌ **NEVER commit** .env, .env.live, config files with secrets
+- ❌ **NEVER put secrets** in documentation, README files, or code comments
+- **If a secret is committed → Delete .git, recreate clean history, force push**
+- **Hardcoded secrets = Stolen funds when repo goes public**
+
+**Required .gitignore patterns:**
+```gitignore
+.env
+.env.*
+*.env
+!.env.example
+*key*
+*secret*
+wallets/
+```
+
 ---
 
 ## 🎯 CURRENT STATUS
