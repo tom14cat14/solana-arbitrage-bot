@@ -38,7 +38,7 @@
 - ✅ **.gitignore must include**: `.env`, `.env.*`, `*.env`, `!.env.example`
 - ✅ **Use .env.example** for documentation (with placeholder values)
 - ❌ **NEVER hardcode** private keys in .md, .rs, .py, .js files
-- ❌ **NEVER commit** .env, .env.live, config files with secrets
+- ❌ **NEVER commit** .env, .env.live, RECOMMENDED_CONFIG.env, or similar
 - ❌ **NEVER put secrets** in documentation, README files, or code comments
 - **If a secret is committed → Delete .git, recreate clean history, force push**
 - **Hardcoded secrets = Stolen funds when repo goes public**
