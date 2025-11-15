@@ -677,7 +677,10 @@ impl ArbitrageEngine {
             }
 
             // Report stats periodically
-            if self.stats.runtime_seconds.is_multiple_of(STATS_REPORT_INTERVAL_SECS)
+            if self
+                .stats
+                .runtime_seconds
+                .is_multiple_of(STATS_REPORT_INTERVAL_SECS)
                 && self.stats.runtime_seconds > 0
             {
                 self.report_stats();

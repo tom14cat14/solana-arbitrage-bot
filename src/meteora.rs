@@ -118,24 +118,25 @@ impl MeteoraSwapBuilder {
             == "true";
 
         if !skip_ghost_pool_check
-            && self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true) {
-                // Rare case: validate on-demand if not cached
-                warn!(
-                    "⚠️ Pool {} not in cache, validating on-demand",
-                    pool_short_id
-                );
-                self.pool_registry
-                    .validate_pools_batch(&[pool_short_id.to_string()])
-                    .await?;
+            && self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true)
+        {
+            // Rare case: validate on-demand if not cached
+            warn!(
+                "⚠️ Pool {} not in cache, validating on-demand",
+                pool_short_id
+            );
+            self.pool_registry
+                .validate_pools_batch(&[pool_short_id.to_string()])
+                .await?;
 
-                // Double-check after validation
-                if self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true) {
-                    return Err(anyhow::anyhow!(
-                        "⚠️ Ghost pool detected: {} (failed validation)",
-                        pool_short_id
-                    ));
-                }
+            // Double-check after validation
+            if self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true) {
+                return Err(anyhow::anyhow!(
+                    "⚠️ Ghost pool detected: {} (failed validation)",
+                    pool_short_id
+                ));
             }
+        }
 
         debug!("✅ Pool validated (cached), proceeding to ownership check");
 
