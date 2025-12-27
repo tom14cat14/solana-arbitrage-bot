@@ -184,7 +184,8 @@ check_arb_bot_health() {
     fi
 
     # Check for recent activity in logs (last 60 seconds)
-    local recent_activity=$(tail -100 "$ARB_BOT_LOG" | grep -c "$(date +%Y-%m-%d)" || echo "0")
+    local recent_activity
+    recent_activity=$(tail -100 "$ARB_BOT_LOG" | grep -c "$(date +%Y-%m-%d)" || echo "0")
     if [ "$recent_activity" -eq 0 ]; then
         log_warn "Arb Bot appears frozen (no recent log activity)"
         return 1
@@ -195,7 +196,8 @@ check_arb_bot_health() {
 
 # Check wallet balance
 check_balance() {
-    local balance=$(solana balance "$WALLET" 2>/dev/null | awk '{print $1}' || echo "ERROR")
+    local balance
+    balance=$(solana balance "$WALLET" 2>/dev/null | awk '{print $1}' || echo "ERROR")
 
     if [ "$balance" = "ERROR" ]; then
         log_warn "Failed to check wallet balance"
@@ -213,7 +215,8 @@ check_balance() {
 
 # Monitor log errors
 check_log_errors() {
-    local recent_errors=$(tail -50 "$ARB_BOT_LOG" | grep -i "error\|panic\|fatal" | tail -5)
+    local recent_errors
+    recent_errors=$(tail -50 "$ARB_BOT_LOG" | grep -i "error\|panic\|fatal" | tail -5)
 
     if [ -n "$recent_errors" ]; then
         log_warn "Recent errors detected:"
@@ -276,8 +279,9 @@ monitor_loop() {
         fi
 
         # Periodic balance check
-        local now=$(date +%s)
-        if [ $((now - last_balance_check)) -ge $balance_check_interval ]; then
+        local now
+        now=$(date +%s)
+        if [ $((now - last_balance_check)) -ge "$balance_check_interval" ]; then
             check_balance
             last_balance_check=$now
         fi

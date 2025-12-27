@@ -1,14 +1,18 @@
 use anyhow::Result;
+use dashmap::DashMap; // OPTIMIZATION: Lock-free concurrent hashmap
+use governor::{
+    clock::DefaultClock,
+    state::{InMemoryState, NotKeyed},
+    Quota, RateLimiter as GovernorRateLimiter,
+}; // CYCLE-7: Rate limiting
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
 use std::num::NonZeroU32;
-use tracing::{debug, warn, info};
-use tokio_retry::{strategy::ExponentialBackoff, Retry};  // CYCLE-6: Retry logic
-use tokio::time::timeout;  // CYCLE-7: Network jitter protection
-use governor::{Quota, RateLimiter as GovernorRateLimiter, clock::DefaultClock, state::{InMemoryState, NotKeyed}};  // CYCLE-7: Rate limiting
-use dashmap::DashMap;  // OPTIMIZATION: Lock-free concurrent hashmap
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::time::timeout; // CYCLE-7: Network jitter protection
+use tokio_retry::{strategy::ExponentialBackoff, Retry}; // CYCLE-6: Retry logic
+use tracing::{debug, info, warn};
 
 /// Cached price entry with timestamp for staleness checking
 #[derive(Debug, Clone)]
@@ -25,7 +29,7 @@ pub struct TokenPrice {
     pub price_sol: f64,
     pub last_update: String,
     pub volume_24h: f64,
-    pub pool_address: String,  // CRITICAL FIX: Full 44-char address for DEX swaps
+    pub pool_address: String, // CRITICAL FIX: Full 44-char address for DEX swaps
 }
 
 /// Response from /prices endpoint
@@ -62,8 +66,8 @@ impl ShredStreamClient {
     pub fn new(service_url: String) -> Self {
         // Build client with gzip support and optimized settings
         let client = reqwest::Client::builder()
-            .gzip(true)  // Enable gzip decompression
-            .pool_max_idle_per_host(2)  // Connection pooling
+            .gzip(true) // Enable gzip decompression
+            .pool_max_idle_per_host(2) // Connection pooling
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
@@ -79,7 +83,7 @@ impl ShredStreamClient {
             price_cache: Arc::new(DashMap::new()),
             rate_limiter,
             last_fetch: None,
-            cache_ttl_secs: 5,  // 5 second cache TTL (prices are fresh for 5s)
+            cache_ttl_secs: 5, // 5 second cache TTL (prices are fresh for 5s)
         }
     }
 
@@ -88,7 +92,7 @@ impl ShredStreamClient {
     pub fn needs_update(&self) -> bool {
         match self.last_fetch {
             Some(last) => last.elapsed().as_secs() >= self.cache_ttl_secs,
-            None => true,  // Never fetched, needs update
+            None => true, // Never fetched, needs update
         }
     }
 
@@ -100,7 +104,10 @@ impl ShredStreamClient {
         // OPTIMIZATION: Skip if cache is still fresh
         if !self.needs_update() {
             let cached_count = self.price_cache.len();
-            debug!("⚡ Cache still fresh ({} prices, TTL: {}s)", cached_count, self.cache_ttl_secs);
+            debug!(
+                "⚡ Cache still fresh ({} prices, TTL: {}s)",
+                cached_count, self.cache_ttl_secs
+            );
             return Ok(cached_count);
         }
         // CYCLE-7: Rate limiting check (prevents API bans)
@@ -120,43 +127,50 @@ impl ShredStreamClient {
             let retry_strategy = ExponentialBackoff::from_millis(100).take(5);
 
             Retry::spawn(retry_strategy, || async {
-            // CYCLE-6: Request with gzip compression enabled
-            match self.client
-                .get(&url)
-                .header("Accept-Encoding", "gzip")
-                .send()
-                .await
-            {
-                Ok(response) => {
-                    // CYCLE-6: Stream response bytes instead of buffering entire response
-                    let bytes = response.bytes().await.map_err(|e| {
-                        warn!("❌ Failed to read response bytes: {}", e);
-                        anyhow::anyhow!("Response bytes error: {}", e)
-                    })?;
+                // CYCLE-6: Request with gzip compression enabled
+                match self
+                    .client
+                    .get(&url)
+                    .header("Accept-Encoding", "gzip")
+                    .send()
+                    .await
+                {
+                    Ok(response) => {
+                        // CYCLE-6: Stream response bytes instead of buffering entire response
+                        let bytes = response.bytes().await.map_err(|e| {
+                            warn!("❌ Failed to read response bytes: {}", e);
+                            anyhow::anyhow!("Response bytes error: {}", e)
+                        })?;
 
-                    debug!("📡 Received {} bytes (gzip-compressed if supported)", bytes.len());
+                        debug!(
+                            "📡 Received {} bytes (gzip-compressed if supported)",
+                            bytes.len()
+                        );
 
-                    // Parse JSON directly from bytes (more efficient than string conversion)
-                    let prices_response: PricesResponse = match serde_json::from_slice(&bytes) {
-                        Ok(parsed) => parsed,
-                        Err(e) => {
-                            warn!("❌ Failed to parse response: {}", e);
-                            // Only log first 500 bytes for debugging (avoid huge logs)
-                            let preview = String::from_utf8_lossy(&bytes[..bytes.len().min(500)]);
-                            warn!("📄 Response preview: {}", preview);
-                            return Err(anyhow::anyhow!("JSON parse error: {}", e));
-                        }
-                    };
+                        // Parse JSON directly from bytes (more efficient than string conversion)
+                        let prices_response: PricesResponse = match serde_json::from_slice(&bytes) {
+                            Ok(parsed) => parsed,
+                            Err(e) => {
+                                warn!("❌ Failed to parse response: {}", e);
+                                // Only log first 500 bytes for debugging (avoid huge logs)
+                                let preview =
+                                    String::from_utf8_lossy(&bytes[..bytes.len().min(500)]);
+                                warn!("📄 Response preview: {}", preview);
+                                return Err(anyhow::anyhow!("JSON parse error: {}", e));
+                            }
+                        };
 
-                    Ok(prices_response)
+                        Ok(prices_response)
+                    }
+                    Err(e) => {
+                        warn!("⚠️ ShredStream fetch failed (will retry): {}", e);
+                        Err(anyhow::anyhow!("Request failed: {}", e))
+                    }
                 }
-                Err(e) => {
-                    warn!("⚠️ ShredStream fetch failed (will retry): {}", e);
-                    Err(anyhow::anyhow!("Request failed: {}", e))
-                }
-            }
-        }).await
-        }).await;
+            })
+            .await
+        })
+        .await;
 
         // Handle timeout
         let result = match timeout_result {
@@ -188,13 +202,21 @@ impl ShredStreamClient {
 
                 // CYCLE-6: Log fetch performance
                 let fetch_duration = fetch_start.elapsed();
-                info!("⚡ Fetched {} prices in {:?} (total_tokens: {}, gzip enabled, cache TTL: {}s)",
-                       fetched_count, fetch_duration, prices_response.total_tokens, self.cache_ttl_secs);
+                info!(
+                    "⚡ Fetched {} prices in {:?} (total_tokens: {}, gzip enabled, cache TTL: {}s)",
+                    fetched_count,
+                    fetch_duration,
+                    prices_response.total_tokens,
+                    self.cache_ttl_secs
+                );
                 Ok(fetched_count)
             }
             Err(e) => {
                 warn!("❌ Failed to fetch prices after retries: {}", e);
-                Err(anyhow::anyhow!("ShredStream service unavailable after retries: {}", e))
+                Err(anyhow::anyhow!(
+                    "ShredStream service unavailable after retries: {}",
+                    e
+                ))
             }
         }
     }
@@ -202,7 +224,9 @@ impl ShredStreamClient {
     /// Get price for specific token on specific DEX
     pub fn get_price(&self, token_mint: &str, dex: &str) -> Option<f64> {
         let cache_key = format!("{}_{}", token_mint, dex);
-        self.price_cache.get(&cache_key).map(|entry| entry.data.price_sol)
+        self.price_cache
+            .get(&cache_key)
+            .map(|entry| entry.data.price_sol)
     }
 
     /// Get all prices for a token across all DEXs
@@ -221,7 +245,7 @@ impl ShredStreamClient {
     pub fn get_all_prices(&self) -> HashMap<String, TokenPrice> {
         let mut result = HashMap::new();
         let now = Instant::now();
-        let max_age = Duration::from_secs(self.cache_ttl_secs * 2);  // Allow 2x TTL for reads
+        let max_age = Duration::from_secs(self.cache_ttl_secs * 2); // Allow 2x TTL for reads
 
         for entry in self.price_cache.iter() {
             // Skip stale entries

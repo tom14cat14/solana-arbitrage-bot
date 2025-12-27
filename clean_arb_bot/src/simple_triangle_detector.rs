@@ -8,13 +8,13 @@ use crate::shredstream_client::TokenPrice;
 pub struct SimpleTriangleOpportunity {
     pub token_a_mint: String,
     pub token_b_mint: String,
-    pub dex_1: String,  // SOL → TokenA
-    pub dex_2: String,  // TokenA → TokenB
-    pub dex_3: String,  // TokenB → SOL
+    pub dex_1: String, // SOL → TokenA
+    pub dex_2: String, // TokenA → TokenB
+    pub dex_3: String, // TokenB → SOL
 
     // GHOST POOL FIX: Full 44-char pool addresses from ShredStream
-    pub pool_1_address: String,  // Full address for SOL → TokenA pool
-    pub pool_3_address: String,  // Full address for TokenB → SOL pool
+    pub pool_1_address: String, // Full address for SOL → TokenA pool
+    pub pool_3_address: String, // Full address for TokenB → SOL pool
 
     pub profit_sol: f64,
     pub profit_percentage: f64,
@@ -49,7 +49,7 @@ impl SimpleTriangleDetector {
         for price in prices.values() {
             token_prices
                 .entry(price.token_mint.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(price);
         }
 
@@ -60,8 +60,12 @@ impl SimpleTriangleDetector {
         token_prices.retain(|token_mint, prices_list| {
             let pool_count = prices_list.len();
             if pool_count > MAX_POOLS_PER_TOKEN {
-                debug!("🚫 Filtering out spam token {} with {} pools (max: {})",
-                    &token_mint[0..8.min(token_mint.len())], pool_count, MAX_POOLS_PER_TOKEN);
+                debug!(
+                    "🚫 Filtering out spam token {} with {} pools (max: {})",
+                    &token_mint[0..8.min(token_mint.len())],
+                    pool_count,
+                    MAX_POOLS_PER_TOKEN
+                );
                 false
             } else {
                 true
@@ -163,7 +167,7 @@ impl SimpleTriangleDetector {
                 // Calculate required margin (UPDATED 2025-10-11)
                 // NEW: total_fees + 0.5% of gross profit (user requirement)
                 // OLD: total_fees * 1.2 (20% margin - too conservative)
-                let required_margin = 0.005 * gross_profit;  // 0.5% of gross as safety margin
+                let required_margin = 0.005 * gross_profit; // 0.5% of gross as safety margin
                 let min_acceptable = total_fees + required_margin;
 
                 // Check if profitable with required margin and realistic
@@ -182,10 +186,10 @@ impl SimpleTriangleDetector {
                         dex_3: price_b.dex.clone(),
 
                         // GHOST POOL FIX: Copy full addresses from ShredStream data
-                        pool_1_address: price_a.pool_address.clone(),  // Full 44-char address
-                        pool_3_address: price_b.pool_address.clone(),  // Full 44-char address
+                        pool_1_address: price_a.pool_address.clone(), // Full 44-char address
+                        pool_3_address: price_b.pool_address.clone(), // Full 44-char address
 
-                        profit_sol: net_profit,  // Store NET profit (after all fees)
+                        profit_sol: net_profit, // Store NET profit (after all fees)
                         profit_percentage: profit_pct,
                         input_amount_sol: capital_sol,
                     });

@@ -50,9 +50,9 @@ const SELL_DISCRIMINATOR: [u8; 8] = [51, 230, 133, 164, 1, 127, 131, 173];
 #[derive(Debug, Clone)]
 pub struct PumpSwapPool {
     pub pool_address: Pubkey,
-    pub base_mint: Pubkey,          // Token mint (offset 43, +8 for Anchor discriminator)
-    pub quote_mint: Pubkey,         // SOL/WSOL mint (offset 75, +8)
-    pub pool_base_account: Pubkey,  // Pool's token vault (offset 139, +8) - NOT USED IN SWAPS
+    pub base_mint: Pubkey, // Token mint (offset 43, +8 for Anchor discriminator)
+    pub quote_mint: Pubkey, // SOL/WSOL mint (offset 75, +8)
+    pub pool_base_account: Pubkey, // Pool's token vault (offset 139, +8) - NOT USED IN SWAPS
     pub pool_quote_account: Pubkey, // Pool's SOL vault (offset 171, +8) - NOT USED IN SWAPS
 }
 
@@ -65,8 +65,8 @@ pub struct PumpSwapSwapBuilder {
 impl PumpSwapSwapBuilder {
     /// Create new PumpSwap swap builder
     pub fn new(rpc_client: std::sync::Arc<SolanaRpcClient>) -> Result<Self> {
-        let program_id = Pubkey::from_str(PUMPSWAP_PROGRAM_ID)
-            .context("Invalid PumpSwap program ID")?;
+        let program_id =
+            Pubkey::from_str(PUMPSWAP_PROGRAM_ID).context("Invalid PumpSwap program ID")?;
 
         info!("✅ PumpSwap swap builder initialized (FIXED 2025-10-13)");
         info!("   Program ID: {}", program_id);
@@ -87,22 +87,29 @@ impl PumpSwapSwapBuilder {
         user_wallet: &Pubkey,
         amount_in: u64,
         minimum_amount_out: u64,
-        swap_a_to_b: bool,  // true = SOL -> Token (BUY), false = Token -> SOL (SELL)
+        swap_a_to_b: bool, // true = SOL -> Token (BUY), false = Token -> SOL (SELL)
     ) -> Result<Instruction> {
         debug!("🔨 Building PumpSwap swap instruction (CORRECT 12-ACCOUNT STRUCTURE)");
         debug!("   Pool: {}", pool.pool_address);
         debug!("   Amount in: {}", amount_in);
         debug!("   Min amount out: {}", minimum_amount_out);
-        debug!("   Direction: {}", if swap_a_to_b { "BUY (SOL->Token)" } else { "SELL (Token->SOL)" });
+        debug!(
+            "   Direction: {}",
+            if swap_a_to_b {
+                "BUY (SOL->Token)"
+            } else {
+                "SELL (Token->SOL)"
+            }
+        );
 
         // Get user's token accounts
         let user_base_account = spl_associated_token_account::get_associated_token_address(
             user_wallet,
-            &pool.base_mint
+            &pool.base_mint,
         );
         let user_quote_account = spl_associated_token_account::get_associated_token_address(
             user_wallet,
-            &pool.quote_mint
+            &pool.quote_mint,
         );
 
         // Build instruction data
@@ -112,52 +119,65 @@ impl PumpSwapSwapBuilder {
             // BUY: SOL -> Token
             // Args: base_amount_out, max_quote_amount_in
             data.extend_from_slice(&BUY_DISCRIMINATOR);
-            data.extend_from_slice(&minimum_amount_out.to_le_bytes());  // base_amount_out
-            data.extend_from_slice(&amount_in.to_le_bytes());            // max_quote_amount_in
+            data.extend_from_slice(&minimum_amount_out.to_le_bytes()); // base_amount_out
+            data.extend_from_slice(&amount_in.to_le_bytes()); // max_quote_amount_in
         } else {
             // SELL: Token -> SOL
             // Args: base_amount_in, min_quote_amount_out
             data.extend_from_slice(&SELL_DISCRIMINATOR);
-            data.extend_from_slice(&amount_in.to_le_bytes());            // base_amount_in
-            data.extend_from_slice(&minimum_amount_out.to_le_bytes());   // min_quote_amount_out
+            data.extend_from_slice(&amount_in.to_le_bytes()); // base_amount_in
+            data.extend_from_slice(&minimum_amount_out.to_le_bytes()); // min_quote_amount_out
         }
 
         // Derive required PDAs (from Grok's PumpSwap AMM analysis)
-        let (global_config, _) = Pubkey::find_program_address(
-            &[b"global"],
-            &self.program_id
-        );
-        let (event_authority, _) = Pubkey::find_program_address(
-            &[b"__event_authority"],
-            &self.program_id
-        );
+        let (global_config, _) = Pubkey::find_program_address(&[b"global"], &self.program_id);
+        let (event_authority, _) =
+            Pubkey::find_program_address(&[b"__event_authority"], &self.program_id);
 
         // Determine mint order based on swap direction
         // For BUY (SOL→Token): mint_a = WSOL, mint_b = token
         // For SELL (Token→SOL): mint_a = token, mint_b = WSOL
         let (mint_a, mint_b, user_account_a, user_account_b) = if swap_a_to_b {
             // BUY: SOL → Token
-            (pool.quote_mint, pool.base_mint, user_quote_account, user_base_account)
+            (
+                pool.quote_mint,
+                pool.base_mint,
+                user_quote_account,
+                user_base_account,
+            )
         } else {
             // SELL: Token → SOL
-            (pool.base_mint, pool.quote_mint, user_base_account, user_quote_account)
+            (
+                pool.base_mint,
+                pool.quote_mint,
+                user_base_account,
+                user_quote_account,
+            )
         };
 
         // Derive vault PDAs with seeds: ["vault", pool, mint]
         let (vault_a, _) = Pubkey::find_program_address(
             &[b"vault", pool.pool_address.as_ref(), mint_a.as_ref()],
-            &self.program_id
+            &self.program_id,
         );
         let (vault_b, _) = Pubkey::find_program_address(
             &[b"vault", pool.pool_address.as_ref(), mint_b.as_ref()],
-            &self.program_id
+            &self.program_id,
         );
 
         debug!("📝 Derived PDAs:");
         debug!("   global_config: {}", global_config);
         debug!("   event_authority: {}", event_authority);
-        debug!("   vault_a ({}): {}", if swap_a_to_b { "WSOL" } else { "token" }, vault_a);
-        debug!("   vault_b ({}): {}", if swap_a_to_b { "token" } else { "WSOL" }, vault_b);
+        debug!(
+            "   vault_a ({}): {}",
+            if swap_a_to_b { "WSOL" } else { "token" },
+            vault_a
+        );
+        debug!(
+            "   vault_b ({}): {}",
+            if swap_a_to_b { "token" } else { "WSOL" },
+            vault_b
+        );
 
         // CORRECT 12-account structure from Grok analysis
         // CRITICAL: Order must match exactly or simulation will fail!
@@ -166,50 +186,39 @@ impl PumpSwapSwapBuilder {
             accounts: vec![
                 // 0: user (signer, writable)
                 AccountMeta::new(*user_wallet, true),
-
                 // 1: user_token_account_a (writable) - input token account
                 AccountMeta::new(user_account_a, false),
-
                 // 2: user_token_account_b (writable) - output token account
                 AccountMeta::new(user_account_b, false),
-
                 // 3: vault_a (writable) - pool vault for token A (PDA)
                 AccountMeta::new(vault_a, false),
-
                 // 4: vault_b (writable) - pool vault for token B (PDA)
                 AccountMeta::new(vault_b, false),
-
                 // 5: mint_a (read-only) - input token mint
                 AccountMeta::new_readonly(mint_a, false),
-
                 // 6: mint_b (read-only) - output token mint
                 AccountMeta::new_readonly(mint_b, false),
-
                 // 7: pool (read-only) - AMM pool state account
                 AccountMeta::new_readonly(pool.pool_address, false),
-
                 // 8: global_config (read-only, PDA)
                 AccountMeta::new_readonly(global_config, false),
-
                 // 9: event_authority (read-only, PDA)
                 AccountMeta::new_readonly(event_authority, false),
-
                 // 10: token_program (read-only)
-                AccountMeta::new_readonly(
-                    Pubkey::from_str(SPL_TOKEN_PROGRAM_ID).unwrap(),
-                    false
-                ),
-
+                AccountMeta::new_readonly(Pubkey::from_str(SPL_TOKEN_PROGRAM_ID).unwrap(), false),
                 // 11: associated_token_program (read-only)
                 AccountMeta::new_readonly(
                     Pubkey::from_str(ASSOCIATED_TOKEN_PROGRAM_ID).unwrap(),
-                    false
+                    false,
                 ),
             ],
             data,
         };
 
-        debug!("✅ PumpSwap swap instruction built ({} accounts, Grok-verified)", instruction.accounts.len());
+        debug!(
+            "✅ PumpSwap swap instruction built ({} accounts, Grok-verified)",
+            instruction.accounts.len()
+        );
         Ok(instruction)
     }
 
@@ -227,7 +236,9 @@ impl PumpSwapSwapBuilder {
         debug!("🔍 Fetching PumpSwap pool info for: {}", pool_address);
 
         // Fetch pool account data
-        let pool_data = self.rpc_client.get_account_data(pool_address)
+        let pool_data = self
+            .rpc_client
+            .get_account_data(pool_address)
             .context("Failed to fetch PumpSwap pool data")?;
 
         if pool_data.len() < 203 {

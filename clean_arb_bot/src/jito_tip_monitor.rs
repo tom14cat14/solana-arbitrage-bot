@@ -40,11 +40,11 @@ impl Default for JitoTipFloor {
     fn default() -> Self {
         Self {
             // Conservative defaults (if API fails, use higher tips)
-            p25: 0.000001,  // 1,000 lamports
-            p50: 0.000001,  // 1,000 lamports
-            p75: 0.000010,  // 10,000 lamports
-            p95: 0.001000,  // 1M lamports (conservative)
-            p99: 0.010000,  // 10M lamports (conservative)
+            p25: 0.000001, // 1,000 lamports
+            p50: 0.000001, // 1,000 lamports
+            p75: 0.000010, // 10,000 lamports
+            p95: 0.001000, // 1M lamports (conservative)
+            p99: 0.010000, // 10M lamports (conservative)
             ema_p50: 0.000001,
             last_updated: std::time::Instant::now(),
         }
@@ -69,8 +69,11 @@ impl JitoTipFloor {
         let capped_tip = tip.min(MAX_TIP);
 
         if capped_tip < tip {
-            debug!("🔒 95th percentile tip CAPPED: {:.6} SOL → {:.6} SOL (market spike protection)",
-                   tip as f64 / 1e9, capped_tip as f64 / 1e9);
+            debug!(
+                "🔒 95th percentile tip CAPPED: {:.6} SOL → {:.6} SOL (market spike protection)",
+                tip as f64 / 1e9,
+                capped_tip as f64 / 1e9
+            );
         }
 
         capped_tip
@@ -82,8 +85,11 @@ impl JitoTipFloor {
         let capped_tip = tip.min(MAX_TIP);
 
         if capped_tip < tip {
-            debug!("🔒 99th percentile tip CAPPED: {:.6} SOL → {:.6} SOL (market spike protection)",
-                   tip as f64 / 1e9, capped_tip as f64 / 1e9);
+            debug!(
+                "🔒 99th percentile tip CAPPED: {:.6} SOL → {:.6} SOL (market spike protection)",
+                tip as f64 / 1e9,
+                capped_tip as f64 / 1e9
+            );
         }
 
         capped_tip
@@ -155,9 +161,21 @@ pub async fn monitor_jito_tip_floor(tip_floor: SharedJitoTipFloor) {
     match fetch_jito_tip_floor().await {
         Ok(data) => {
             info!("📊 Initial JITO tip floor:");
-            info!("   50th percentile: {:.9} SOL ({} lamports)", data.p50, (data.p50 * 1e9) as u64);
-            info!("   95th percentile: {:.9} SOL ({} lamports)", data.p95, data.p95_lamports());
-            info!("   99th percentile: {:.9} SOL ({} lamports)", data.p99, data.p99_lamports());
+            info!(
+                "   50th percentile: {:.9} SOL ({} lamports)",
+                data.p50,
+                (data.p50 * 1e9) as u64
+            );
+            info!(
+                "   95th percentile: {:.9} SOL ({} lamports)",
+                data.p95,
+                data.p95_lamports()
+            );
+            info!(
+                "   99th percentile: {:.9} SOL ({} lamports)",
+                data.p99,
+                data.p99_lamports()
+            );
             *tip_floor.write().await = data;
         }
         Err(e) => {
@@ -182,10 +200,14 @@ pub async fn monitor_jito_tip_floor(tip_floor: SharedJitoTipFloor) {
 
                 if p95_change.abs() > 20.0 || p99_change.abs() > 20.0 {
                     info!("📊 JITO tip floor changed significantly:");
-                    info!("   95th: {:.9} SOL → {:.9} SOL ({:+.1}%)",
-                          old_data.p95, new_data.p95, p95_change);
-                    info!("   99th: {:.9} SOL → {:.9} SOL ({:+.1}%)",
-                          old_data.p99, new_data.p99, p99_change);
+                    info!(
+                        "   95th: {:.9} SOL → {:.9} SOL ({:+.1}%)",
+                        old_data.p95, new_data.p95, p95_change
+                    );
+                    info!(
+                        "   99th: {:.9} SOL → {:.9} SOL ({:+.1}%)",
+                        old_data.p99, new_data.p99, p99_change
+                    );
                 } else {
                     debug!("✅ JITO tip floor updated (no major changes)");
                 }
@@ -242,8 +264,8 @@ mod tests {
     #[test]
     fn test_competitive_tips() {
         let floor = JitoTipFloor {
-            p95: 0.001,  // 1M lamports
-            p99: 0.010,  // 10M lamports
+            p95: 0.001, // 1M lamports
+            p99: 0.010, // 10M lamports
             ..Default::default()
         };
 
@@ -256,8 +278,8 @@ mod tests {
     fn test_hard_cap() {
         // Test that extreme market spikes are capped at 0.003 SOL
         let extreme_floor = JitoTipFloor {
-            p95: 0.010,  // 10M lamports (extreme)
-            p99: 0.100,  // 100M lamports (extreme spike)
+            p95: 0.010, // 10M lamports (extreme)
+            p99: 0.100, // 100M lamports (extreme spike)
             ..Default::default()
         };
 

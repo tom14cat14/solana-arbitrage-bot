@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -83,12 +83,14 @@ impl RateLimiter {
         let now = Instant::now();
 
         // Remove old requests outside the window
-        self.requests.retain(|&t| now.duration_since(t) < self.window_duration);
+        self.requests
+            .retain(|&t| now.duration_since(t) < self.window_duration);
 
         // If at limit, wait until oldest request expires
         if self.requests.len() >= self.max_requests {
             if let Some(&oldest) = self.requests.first() {
-                let wait_time = self.window_duration
+                let wait_time = self
+                    .window_duration
                     .checked_sub(now.duration_since(oldest))
                     .unwrap_or(Duration::from_millis(100));
 
@@ -183,10 +185,14 @@ impl JupiterTriangleDetector {
                 let quote: JupiterQuoteResponse = response.json().await?;
 
                 // Parse amounts with error context
-                let in_amount: u64 = quote.in_amount.parse()
-                    .context(format!("Failed to parse Jupiter quote in_amount: {}", quote.in_amount))?;
-                let out_amount: u64 = quote.out_amount.parse()
-                    .context(format!("Failed to parse Jupiter quote out_amount: {}", quote.out_amount))?;
+                let in_amount: u64 = quote.in_amount.parse().context(format!(
+                    "Failed to parse Jupiter quote in_amount: {}",
+                    quote.in_amount
+                ))?;
+                let out_amount: u64 = quote.out_amount.parse().context(format!(
+                    "Failed to parse Jupiter quote out_amount: {}",
+                    quote.out_amount
+                ))?;
 
                 let input_sol = in_amount as f64 / 1e9;
                 let output_sol = out_amount as f64 / 1e9;
@@ -202,7 +208,7 @@ impl JupiterTriangleDetector {
 
                 // Calculate required margin (UPDATED 2025-10-11)
                 // NEW: fees + 0.5% of gross profit (user requirement)
-                let required_margin = 0.005 * gross_profit;  // 0.5% of gross as safety margin
+                let required_margin = 0.005 * gross_profit; // 0.5% of gross as safety margin
                 let min_acceptable = total_fees + required_margin;
 
                 debug!(
@@ -220,7 +226,7 @@ impl JupiterTriangleDetector {
                     return Ok(Some(JupiterTriangleOpportunity {
                         input_amount_sol: input_sol,
                         output_amount_sol: output_sol,
-                        profit_sol: net_profit,  // Store NET profit (after all fees)
+                        profit_sol: net_profit, // Store NET profit (after all fees)
                         profit_percentage: profit_pct,
                         route_hops: quote.route_plan.len(),
                         route_description: route_desc,

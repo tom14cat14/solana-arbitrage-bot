@@ -46,10 +46,10 @@ if pgrep -f "$BINARY" > /dev/null 2>&1; then
     echo "   PID: $BOT_PID"
 
     # Get process info
-    PS_INFO=$(ps -p $BOT_PID -o %cpu,%mem,etime,cmd --no-headers 2>/dev/null || echo "N/A")
-    CPU=$(echo $PS_INFO | awk '{print $1}')
-    MEM=$(echo $PS_INFO | awk '{print $2}')
-    UPTIME=$(echo $PS_INFO | awk '{print $3}')
+    PS_INFO=$(ps -p "$BOT_PID" -o %cpu,%mem,etime,cmd --no-headers 2>/dev/null || echo "N/A")
+    CPU=$(echo "$PS_INFO" | awk '{print $1}')
+    MEM=$(echo "$PS_INFO" | awk '{print $2}')
+    UPTIME=$(echo "$PS_INFO" | awk '{print $3}')
 
     echo "   CPU: ${CPU}%"
     echo "   Memory: ${MEM}%"
@@ -86,7 +86,7 @@ if [ -f "$LOG_FILE" ]; then
     echo "   Execution attempts: $EXEC_COUNT"
 
     # Count successful executions
-    SUCCESS_COUNT=$(grep "PROFITABLE.*Submitted bundle" "$LOG_FILE" 2>/dev/null | wc -l)
+    SUCCESS_COUNT=$(grep -c "PROFITABLE.*Submitted bundle" "$LOG_FILE" 2>/dev/null || echo "0")
     echo "   Successful trades: $SUCCESS_COUNT"
 
     # Count rejections
@@ -97,7 +97,7 @@ if [ -f "$LOG_FILE" ]; then
 
     # Last few log lines
     echo -e "${BLUE}📝 Last 5 Events:${NC}"
-    grep -E "(opportunity|Executing|PROFITABLE|WARN|ERROR)" "$LOG_FILE" 2>/dev/null | tail -5 | sed 's/\x1b\[[0-9;]*m//g' | while read line; do
+    grep -E "(opportunity|Executing|PROFITABLE|WARN|ERROR)" "$LOG_FILE" 2>/dev/null | tail -5 | sed 's/\x1b\[[0-9;]*m//g' | while read -r line; do
         echo "   $line"
     done
 else
@@ -108,6 +108,6 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Commands:"
 echo "  📊 Attach to session: tmux attach -t $SESSION_NAME"
-echo "  📄 View logs: tail -f $LOG_FILE"
+echo "  📄 View logs: tail -f "$LOG_FILE""
 echo "  🔴 Stop bot: ./production/stop_arb_bot.sh"
 echo "  💊 Health check: ./production/health_check.sh"

@@ -1,9 +1,9 @@
+use rayon::prelude::*;
 use std::collections::HashMap;
-use tracing::{debug, info};
-use rayon::prelude::*;  // CYCLE-6: Parallel processing
+use tracing::{debug, info}; // CYCLE-6: Parallel processing
 
-use crate::shredstream_client::TokenPrice;
 use crate::dex_registry::DexRegistry;
+use crate::shredstream_client::TokenPrice;
 
 /// Triangle arbitrage opportunity (e.g., SOL → TokenA → TokenB → SOL)
 #[derive(Debug, Clone)]
@@ -72,18 +72,21 @@ impl TriangleArbitrage {
             .iter()
             .filter(|&price| {
                 // Check if this price creates reasonable spreads with others
-                let reasonable_spreads = prices.iter().filter(|&other| {
-                    if price.dex == other.dex {
-                        return true; // Same DEX, always reasonable
-                    }
-                    let price_diff = (other.price_sol - price.price_sol).abs();
-                    let avg_price = (price.price_sol + other.price_sol) / 2.0;
-                    if avg_price == 0.0 {
-                        return false;
-                    }
-                    let spread = (price_diff / avg_price) * 100.0;
-                    spread <= upper_bound
-                }).count();
+                let reasonable_spreads = prices
+                    .iter()
+                    .filter(|&other| {
+                        if price.dex == other.dex {
+                            return true; // Same DEX, always reasonable
+                        }
+                        let price_diff = (other.price_sol - price.price_sol).abs();
+                        let avg_price = (price.price_sol + other.price_sol) / 2.0;
+                        if avg_price == 0.0 {
+                            return false;
+                        }
+                        let spread = (price_diff / avg_price) * 100.0;
+                        spread <= upper_bound
+                    })
+                    .count();
 
                 // Keep price if it has reasonable spreads with majority of other prices
                 reasonable_spreads >= (prices.len() / 2)
@@ -124,15 +127,18 @@ impl TriangleArbitrage {
         for price in prices.values() {
             token_prices
                 .entry(price.token_mint.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(price);
         }
 
-        debug!("🔍 Scanning {} unique tokens for cross-DEX arbitrage (parallel)", token_prices.len());
+        debug!(
+            "🔍 Scanning {} unique tokens for cross-DEX arbitrage (parallel)",
+            token_prices.len()
+        );
 
         // CYCLE-6: Parallel iteration over tokens using Rayon (4-8x speedup)
         let mut opportunities: Vec<TriangleOpportunity> = token_prices
-            .par_iter()  // Parallel processing across CPU cores
+            .par_iter() // Parallel processing across CPU cores
             .filter_map(|(token_mint, token_price_list)| {
                 // Skip SOL itself
                 if token_mint == &self.sol_mint {
@@ -182,7 +188,7 @@ impl TriangleArbitrage {
                     Some(token_opps)
                 }
             })
-            .flatten()  // Flatten all token opportunities into single list
+            .flatten() // Flatten all token opportunities into single list
             .collect();
 
         // Sort by profit (highest first)
@@ -197,10 +203,14 @@ impl TriangleArbitrage {
         if !opportunities.is_empty() {
             info!(
                 "⚡ Triangle scan complete in {:?} - {} opportunities (parallel processing)",
-                triangle_duration, opportunities.len()
+                triangle_duration,
+                opportunities.len()
             );
         } else {
-            debug!("⚡ Triangle scan complete in {:?} - no opportunities", triangle_duration);
+            debug!(
+                "⚡ Triangle scan complete in {:?} - no opportunities",
+                triangle_duration
+            );
         }
 
         // Return top 10
@@ -298,9 +308,21 @@ impl TriangleArbitrage {
         // Return the more profitable direction
         let (profit_sol, buy_dex, sell_dex, buy_price, sell_price) =
             if profit_a_to_b > profit_b_to_a {
-                (profit_a_to_b, &price_a.dex, &price_b.dex, price_a.price_sol, price_b.price_sol)
+                (
+                    profit_a_to_b,
+                    &price_a.dex,
+                    &price_b.dex,
+                    price_a.price_sol,
+                    price_b.price_sol,
+                )
             } else {
-                (profit_b_to_a, &price_b.dex, &price_a.dex, price_b.price_sol, price_a.price_sol)
+                (
+                    profit_b_to_a,
+                    &price_b.dex,
+                    &price_a.dex,
+                    price_b.price_sol,
+                    price_a.price_sol,
+                )
             };
 
         // FIX 3: Sanity check for impossible profits
@@ -326,21 +348,14 @@ impl TriangleArbitrage {
         }
 
         if profit_sol > 0.0 {
-
             Some(TriangleOpportunity {
                 path: vec![
                     "SOL".to_string(),
                     token_mint[..8].to_string(),
                     "SOL".to_string(),
                 ],
-                dexs: vec![
-                    buy_dex.clone(),
-                    sell_dex.clone(),
-                ],
-                prices: vec![
-                    buy_price,
-                    sell_price,
-                ],
+                dexs: vec![buy_dex.clone(), sell_dex.clone()],
+                prices: vec![buy_price, sell_price],
                 estimated_profit_sol: profit_sol,
                 profit_percentage,
             })

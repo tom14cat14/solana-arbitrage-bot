@@ -10,28 +10,23 @@
 
 use anyhow::{Context, Result};
 use solana_sdk::{
-    compute_budget::ComputeBudgetInstruction,
-    hash::Hash,
-    instruction::Instruction,
-    pubkey::Pubkey,
-    signature::Signature,
-    signer::Signer,
-    transaction::Transaction,
+    compute_budget::ComputeBudgetInstruction, hash::Hash, instruction::Instruction, pubkey::Pubkey,
+    signature::Signature, signer::Signer, transaction::Transaction,
 };
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use crate::{
-    types::{DexType, SwapParams},
-    rpc_client::SolanaRpcClient,
-    pool_registry::PoolRegistry,
-    meteora::MeteoraSwapBuilder,
-    pumpswap::PumpSwapSwapBuilder,
-    orca::OrcaSwapBuilder,
-    raydium::RaydiumSwapBuilder,
-    humidifi::HumidiFiSwapBuilder,
-};
 use crate::jito_bundle_client::JitoBundleClient;
+use crate::{
+    humidifi::HumidiFiSwapBuilder,
+    meteora::MeteoraSwapBuilder,
+    orca::OrcaSwapBuilder,
+    pool_registry::PoolRegistry,
+    pumpswap::PumpSwapSwapBuilder,
+    raydium::RaydiumSwapBuilder,
+    rpc_client::SolanaRpcClient,
+    types::{DexType, SwapParams},
+};
 
 /// High-level swap executor that coordinates all swap operations
 pub struct SwapExecutor {
@@ -65,25 +60,16 @@ impl SwapExecutor {
         jito_client: Option<Arc<JitoBundleClient>>,
     ) -> Result<Self> {
         // Initialize Meteora builder
-        let meteora_builder = MeteoraSwapBuilder::new(
-            rpc_client.clone(),
-            pool_registry.clone(),
-        )?;
+        let meteora_builder = MeteoraSwapBuilder::new(rpc_client.clone(), pool_registry.clone())?;
 
         // Initialize Orca builder
-        let orca_builder = OrcaSwapBuilder::new(
-            rpc_client.clone(),
-            pool_registry.clone(),
-        )?;
+        let orca_builder = OrcaSwapBuilder::new(rpc_client.clone(), pool_registry.clone())?;
 
         // Initialize PumpSwap builder
         let pumpswap_builder = PumpSwapSwapBuilder::new(rpc_client.clone())?;
 
         // Initialize Raydium builder
-        let raydium_builder = RaydiumSwapBuilder::new(
-            rpc_client.clone(),
-            pool_registry.clone(),
-        )?;
+        let raydium_builder = RaydiumSwapBuilder::new(rpc_client.clone(), pool_registry.clone())?;
 
         // Initialize HumidiFi builder (may fail if program ID is incorrect)
         let humidifi_builder = match HumidiFiSwapBuilder::new() {
@@ -98,9 +84,22 @@ impl SwapExecutor {
         };
 
         info!("✅ Swap executor initialized");
-        info!("   DEX support: Meteora DLMM/DAMM V2, Orca Whirlpools, Raydium CPMM, PumpSwap{}",
-            if humidifi_builder.is_some() { ", HumidiFi" } else { "" });
-        info!("   JITO bundles: {}", if jito_client.is_some() { "enabled" } else { "disabled" });
+        info!(
+            "   DEX support: Meteora DLMM/DAMM V2, Orca Whirlpools, Raydium CPMM, PumpSwap{}",
+            if humidifi_builder.is_some() {
+                ", HumidiFi"
+            } else {
+                ""
+            }
+        );
+        info!(
+            "   JITO bundles: {}",
+            if jito_client.is_some() {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        );
 
         Ok(Self {
             rpc_client,
@@ -111,8 +110,8 @@ impl SwapExecutor {
             raydium_builder,
             humidifi_builder,
             jito_client,
-            compute_unit_price: 1000,     // 1000 micro-lamports (0.001 lamports per CU)
-            compute_unit_limit: 200_000,  // 200k compute units
+            compute_unit_price: 1000, // 1000 micro-lamports (0.001 lamports per CU)
+            compute_unit_limit: 200_000, // 200k compute units
         })
     }
 
@@ -151,7 +150,9 @@ impl SwapExecutor {
         // Ensure minimum_amount_out is reasonable (not allowing >5% slippage)
         if let Some(expected_out) = swap_params.expected_amount_out {
             if swap_params.minimum_amount_out > 0 {
-                let slippage = ((expected_out - swap_params.minimum_amount_out) as f64 / expected_out as f64) * 100.0;
+                let slippage = ((expected_out - swap_params.minimum_amount_out) as f64
+                    / expected_out as f64)
+                    * 100.0;
                 if slippage > 5.0 {
                     return Err(anyhow::anyhow!(
                         "Slippage validation failed: {:.2}% exceeds maximum 5%\n   Expected: {}, Min: {}",
@@ -169,24 +170,18 @@ impl SwapExecutor {
         }
 
         // Build swap instruction based on DEX type (now async for pool resolution)
-        let swap_ix = self.build_swap_instruction(
-            dex_type,
-            pool_short_id,
-            swap_params,
-            &wallet.pubkey(),
-        ).await?;
+        let swap_ix = self
+            .build_swap_instruction(dex_type, pool_short_id, swap_params, &wallet.pubkey())
+            .await?;
 
         // Get recent blockhash
-        let recent_blockhash = self.rpc_client
+        let recent_blockhash = self
+            .rpc_client
             .get_latest_blockhash()
             .context("Failed to get recent blockhash")?;
 
         // Build complete transaction with compute budget
-        let transaction = self.build_transaction(
-            vec![swap_ix],
-            wallet,
-            recent_blockhash,
-        )?;
+        let transaction = self.build_transaction(vec![swap_ix], wallet, recent_blockhash)?;
 
         // CYCLE-7: MANDATORY SIMULATION (Grok recommendation)
         // Catches failed swaps without cost - bulletproof safety
@@ -201,9 +196,9 @@ impl SwapExecutor {
 
         info!("✅ Simulation passed - executing real transaction");
 
-
         // Send transaction
-        let signature = self.rpc_client
+        let signature = self
+            .rpc_client
             .send_transaction(&transaction)
             .context("Failed to send transaction")?;
 
@@ -214,8 +209,10 @@ impl SwapExecutor {
         // Never assume transaction succeeded until confirmed on-chain
         match tokio::time::timeout(
             tokio::time::Duration::from_secs(5),
-            self.confirm_transaction(&signature)
-        ).await {
+            self.confirm_transaction(&signature),
+        )
+        .await
+        {
             Ok(Ok(confirmed)) => {
                 if confirmed {
                     info!("✅ Swap transaction confirmed: {}", signature);
@@ -227,18 +224,15 @@ impl SwapExecutor {
                     ))
                 }
             }
-            Ok(Err(e)) => {
-                Err(anyhow::anyhow!(
-                    "Error while confirming transaction {}: {}",
-                    signature, e
-                ))
-            }
-            Err(_) => {
-                Err(anyhow::anyhow!(
-                    "Transaction confirmation timeout (5s) for: {}",
-                    signature
-                ))
-            }
+            Ok(Err(e)) => Err(anyhow::anyhow!(
+                "Error while confirming transaction {}: {}",
+                signature,
+                e
+            )),
+            Err(_) => Err(anyhow::anyhow!(
+                "Transaction confirmation timeout (5s) for: {}",
+                signature
+            )),
         }
     }
 
@@ -269,9 +263,15 @@ impl SwapExecutor {
         let user_pubkey = wallet.pubkey();
 
         // Build all three swap instructions (async for pool resolution)
-        let ix1 = self.build_swap_instruction(leg1.0, leg1.1, leg1.2, &user_pubkey).await?;
-        let ix2 = self.build_swap_instruction(leg2.0, leg2.1, leg2.2, &user_pubkey).await?;
-        let ix3 = self.build_swap_instruction(leg3.0, leg3.1, leg3.2, &user_pubkey).await?;
+        let ix1 = self
+            .build_swap_instruction(leg1.0, leg1.1, leg1.2, &user_pubkey)
+            .await?;
+        let ix2 = self
+            .build_swap_instruction(leg2.0, leg2.1, leg2.2, &user_pubkey)
+            .await?;
+        let ix3 = self
+            .build_swap_instruction(leg3.0, leg3.1, leg3.2, &user_pubkey)
+            .await?;
 
         debug!("✅ Built all 3 swap instructions");
 
@@ -279,11 +279,7 @@ impl SwapExecutor {
         let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
 
         // Build transaction with all swaps
-        let transaction = self.build_transaction(
-            vec![ix1, ix2, ix3],
-            wallet,
-            recent_blockhash,
-        )?;
+        let transaction = self.build_transaction(vec![ix1, ix2, ix3], wallet, recent_blockhash)?;
 
         // Simulate first
         info!("🧪 Simulating triangle transaction...");
@@ -334,19 +330,21 @@ impl SwapExecutor {
         let user_pubkey = wallet.pubkey();
 
         // Build all three swap instructions (async for pool resolution)
-        let ix1 = self.build_swap_instruction(leg1.0, leg1.1, leg1.2, &user_pubkey).await?;
-        let ix2 = self.build_swap_instruction(leg2.0, leg2.1, leg2.2, &user_pubkey).await?;
-        let ix3 = self.build_swap_instruction(leg3.0, leg3.1, leg3.2, &user_pubkey).await?;
+        let ix1 = self
+            .build_swap_instruction(leg1.0, leg1.1, leg1.2, &user_pubkey)
+            .await?;
+        let ix2 = self
+            .build_swap_instruction(leg2.0, leg2.1, leg2.2, &user_pubkey)
+            .await?;
+        let ix3 = self
+            .build_swap_instruction(leg3.0, leg3.1, leg3.2, &user_pubkey)
+            .await?;
 
         // Get recent blockhash
         let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
 
         // Build and return transaction
-        let transaction = self.build_transaction(
-            vec![ix1, ix2, ix3],
-            wallet,
-            recent_blockhash,
-        )?;
+        let transaction = self.build_transaction(vec![ix1, ix2, ix3], wallet, recent_blockhash)?;
 
         Ok(transaction)
     }
@@ -381,21 +379,28 @@ impl SwapExecutor {
         let user_pubkey = wallet.pubkey();
 
         // Build all three swap instructions (async for pool resolution)
-        let ix1 = self.build_swap_instruction(leg1.0, leg1.1, leg1.2, &user_pubkey).await?;
-        let ix2 = self.build_swap_instruction(leg2.0, leg2.1, leg2.2, &user_pubkey).await?;
-        let ix3 = self.build_swap_instruction(leg3.0, leg3.1, leg3.2, &user_pubkey).await?;
+        let ix1 = self
+            .build_swap_instruction(leg1.0, leg1.1, leg1.2, &user_pubkey)
+            .await?;
+        let ix2 = self
+            .build_swap_instruction(leg2.0, leg2.1, leg2.2, &user_pubkey)
+            .await?;
+        let ix3 = self
+            .build_swap_instruction(leg3.0, leg3.1, leg3.2, &user_pubkey)
+            .await?;
 
         info!("✅ Built all 3 swap instructions");
 
         // Build JITO tip instruction
-        let tip_ix = solana_sdk::system_instruction::transfer(
-            &user_pubkey,
-            tip_account,
-            tip_lamports,
-        );
+        let tip_ix =
+            solana_sdk::system_instruction::transfer(&user_pubkey, tip_account, tip_lamports);
 
-        info!("✅ Built JITO tip instruction: {} lamports (0.{:06} SOL) to {}",
-              tip_lamports, tip_lamports / 1000, tip_account);
+        info!(
+            "✅ Built JITO tip instruction: {} lamports (0.{:06} SOL) to {}",
+            tip_lamports,
+            tip_lamports / 1000,
+            tip_account
+        );
 
         // SECURITY FIX (2025-10-08): Combine swap instructions + tip
         // Note: build_transaction() will add compute budget instructions automatically
@@ -407,14 +412,12 @@ impl SwapExecutor {
         let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
 
         // Build transaction with all instructions atomically
-        let transaction = self.build_transaction(
-            all_instructions,
-            wallet,
-            recent_blockhash,
-        )?;
+        let transaction = self.build_transaction(all_instructions, wallet, recent_blockhash)?;
 
-        info!("✅ Built SECURE transaction: 3 swaps + 1 tip = {} total instructions",
-              transaction.message.instructions.len());
+        info!(
+            "✅ Built SECURE transaction: 3 swaps + 1 tip = {} total instructions",
+            transaction.message.instructions.len()
+        );
 
         Ok(transaction)
     }
@@ -467,20 +470,24 @@ impl SwapExecutor {
         };
 
         info!("💰 Profit-based tip calculation:");
-        info!("   Expected profit: {} lamports (0.{:06} SOL)",
-              expected_profit_lamports, expected_profit_lamports / 1000);
-        info!("   Calculated tip: {} lamports (0.{:06} SOL)",
-              tip_lamports, tip_lamports / 1000);
-        info!("   Tip percentage: {:.1}%",
-              (tip_lamports as f64 / expected_profit_lamports as f64) * 100.0);
+        info!(
+            "   Expected profit: {} lamports (0.{:06} SOL)",
+            expected_profit_lamports,
+            expected_profit_lamports / 1000
+        );
+        info!(
+            "   Calculated tip: {} lamports (0.{:06} SOL)",
+            tip_lamports,
+            tip_lamports / 1000
+        );
+        info!(
+            "   Tip percentage: {:.1}%",
+            (tip_lamports as f64 / expected_profit_lamports as f64) * 100.0
+        );
 
         // Build transaction with calculated tip
-        self.build_triangle_with_tip(
-            leg1, leg2, leg3,
-            wallet,
-            tip_lamports,
-            tip_account,
-        ).await
+        self.build_triangle_with_tip(leg1, leg2, leg3, wallet, tip_lamports, tip_account)
+            .await
     }
 
     /// Build swap instruction for given DEX type (async for pool resolution)
@@ -494,41 +501,44 @@ impl SwapExecutor {
         match dex_type {
             // Meteora variants (all use same builder)
             DexType::MeteoraDammV1 | DexType::MeteoraDammV2 | DexType::MeteoraDlmm => {
-                self.meteora_builder.build_swap_instruction(
-                    pool_short_id,
-                    swap_params,
-                    user_pubkey,
-                ).await
+                self.meteora_builder
+                    .build_swap_instruction(pool_short_id, swap_params, user_pubkey)
+                    .await
             }
 
             // Orca variants
             DexType::OrcaWhirlpools | DexType::OrcaLegacy => {
                 // Both use same Orca builder (handles both variants)
-                self.orca_builder.build_swap_instruction(
-                    pool_short_id,
-                    swap_params,
-                    user_pubkey,
-                ).await
+                self.orca_builder
+                    .build_swap_instruction(pool_short_id, swap_params, user_pubkey)
+                    .await
             }
 
             // Raydium variants (all use same builder)
-            DexType::RaydiumAmmV4 | DexType::RaydiumClmm | DexType::RaydiumCpmm | DexType::RaydiumStable => {
-                self.raydium_builder.build_swap_instruction(
-                    pool_short_id,
-                    swap_params,
-                    user_pubkey,
-                ).await
+            DexType::RaydiumAmmV4
+            | DexType::RaydiumClmm
+            | DexType::RaydiumCpmm
+            | DexType::RaydiumStable => {
+                self.raydium_builder
+                    .build_swap_instruction(pool_short_id, swap_params, user_pubkey)
+                    .await
             }
 
             DexType::PumpSwap => {
                 // Resolve pool address from short ID
-                let pool_address = self.pool_registry
+                let pool_address = self
+                    .pool_registry
                     .resolve_pool_address(pool_short_id, dex_type)
                     .await
-                    .context(format!("Failed to resolve PumpSwap pool address for {}", pool_short_id))?;
+                    .context(format!(
+                        "Failed to resolve PumpSwap pool address for {}",
+                        pool_short_id
+                    ))?;
 
                 // Fetch pool info from on-chain data
-                let pool_info = self.pumpswap_builder.fetch_pool_info(&pool_address)
+                let pool_info = self
+                    .pumpswap_builder
+                    .fetch_pool_info(&pool_address)
                     .context("Failed to fetch PumpSwap pool info")?;
 
                 // Build swap instruction
@@ -543,17 +553,26 @@ impl SwapExecutor {
 
             // HumidiFi dark pool
             DexType::HumidiFi => {
-                debug!("🐸 Building HumidiFi swap instruction for pool {}", pool_short_id);
+                debug!(
+                    "🐸 Building HumidiFi swap instruction for pool {}",
+                    pool_short_id
+                );
 
                 // Get HumidiFi builder (should be initialized)
-                let builder = self.humidifi_builder.as_ref()
+                let builder = self
+                    .humidifi_builder
+                    .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("HumidiFi builder not initialized"))?;
 
                 // Resolve pool address from short ID
-                let pool_address = self.pool_registry
+                let pool_address = self
+                    .pool_registry
                     .resolve_pool_address(pool_short_id, dex_type)
                     .await
-                    .context(format!("Failed to resolve HumidiFi pool address for {}", pool_short_id))?;
+                    .context(format!(
+                        "Failed to resolve HumidiFi pool address for {}",
+                        pool_short_id
+                    ))?;
 
                 // TODO: Fetch actual token mints from pool account data (like Meteora/Orca do)
                 // For now, use common token mints (SOL/USDC) since HumidiFi primarily deals with these pairs
@@ -570,27 +589,42 @@ impl SwapExecutor {
                 };
 
                 // Build swap instruction using legacy method (raw addresses)
-                let instructions = builder.build_swap_instruction_legacy(
-                    pool_address,
-                    *user_pubkey,
-                    token_a,
-                    token_b,
-                    swap_params.amount_in,
-                    swap_params.minimum_amount_out,
-                    swap_params.swap_a_to_b,
-                ).await?;
+                let instructions = builder
+                    .build_swap_instruction_legacy(
+                        pool_address,
+                        *user_pubkey,
+                        token_a,
+                        token_b,
+                        swap_params.amount_in,
+                        swap_params.minimum_amount_out,
+                        swap_params.swap_a_to_b,
+                    )
+                    .await?;
 
                 // Return first instruction (should be single swap instruction)
-                instructions.into_iter().next()
+                instructions
+                    .into_iter()
+                    .next()
                     .ok_or_else(|| anyhow::anyhow!("HumidiFi builder returned no instructions"))
             }
 
             // Not yet implemented DEXes - gracefully skip
-            DexType::Jupiter | DexType::Serum | DexType::Aldrin | DexType::Saros |
-            DexType::Crema | DexType::Cropper | DexType::Lifinity | DexType::Fluxbeam => {
-                warn!("⚠️ DEX {:?} not yet implemented - skipping opportunity on pool {}", dex_type, pool_short_id);
-                warn!("   To enable this DEX, implement builder in src/{}.rs",
-                      format!("{:?}", dex_type).to_lowercase());
+            DexType::Jupiter
+            | DexType::Serum
+            | DexType::Aldrin
+            | DexType::Saros
+            | DexType::Crema
+            | DexType::Cropper
+            | DexType::Lifinity
+            | DexType::Fluxbeam => {
+                warn!(
+                    "⚠️ DEX {:?} not yet implemented - skipping opportunity on pool {}",
+                    dex_type, pool_short_id
+                );
+                warn!(
+                    "   To enable this DEX, implement builder in src/{}.rs",
+                    format!("{:?}", dex_type).to_lowercase()
+                );
                 Err(anyhow::anyhow!("DEX {:?} implementation pending", dex_type))
             }
         }
@@ -607,38 +641,41 @@ impl SwapExecutor {
 
         // HIGH FIX: Dynamic compute budget based on swap complexity
         let estimated_cu = match swap_instructions.len() {
-            1 => 100_000,   // Single swap
-            2 => 200_000,   // 2-leg arbitrage
-            3 => 300_000,   // Triangle arbitrage
-            _ => 400_000,   // Complex multi-hop
+            1 => 100_000, // Single swap
+            2 => 200_000, // 2-leg arbitrage
+            3 => 300_000, // Triangle arbitrage
+            _ => 400_000, // Complex multi-hop
         };
 
         // Add 20% safety buffer
         let compute_limit = (estimated_cu as f64 * 1.2) as u32;
 
-        debug!("Estimated compute units: {} (with 20% buffer: {})", estimated_cu, compute_limit);
+        debug!(
+            "Estimated compute units: {} (with 20% buffer: {})",
+            estimated_cu, compute_limit
+        );
 
         // Add compute budget instructions first
-        instructions.push(
-            ComputeBudgetInstruction::set_compute_unit_price(self.compute_unit_price)
-        );
-        instructions.push(
-            ComputeBudgetInstruction::set_compute_unit_limit(compute_limit)
-        );
+        instructions.push(ComputeBudgetInstruction::set_compute_unit_price(
+            self.compute_unit_price,
+        ));
+        instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(
+            compute_limit,
+        ));
 
         // Add swap instructions
         instructions.extend(swap_instructions);
 
         // Create transaction
-        let mut transaction = Transaction::new_with_payer(
-            &instructions,
-            Some(&wallet.pubkey()),
-        );
+        let mut transaction = Transaction::new_with_payer(&instructions, Some(&wallet.pubkey()));
 
         // Sign transaction
         transaction.sign(&[wallet], recent_blockhash);
 
-        debug!("✅ Built transaction with {} instructions", instructions.len());
+        debug!(
+            "✅ Built transaction with {} instructions",
+            instructions.len()
+        );
 
         Ok(transaction)
     }
@@ -665,13 +702,9 @@ impl SwapExecutor {
     ) -> Result<u64> {
         match dex_type {
             // Meteora variants (all use same builder)
-            DexType::MeteoraDammV1 | DexType::MeteoraDammV2 | DexType::MeteoraDlmm => {
-                self.meteora_builder.estimate_swap_output(
-                    pool_short_id,
-                    amount_in,
-                    swap_a_to_b,
-                )
-            }
+            DexType::MeteoraDammV1 | DexType::MeteoraDammV2 | DexType::MeteoraDlmm => self
+                .meteora_builder
+                .estimate_swap_output(pool_short_id, amount_in, swap_a_to_b),
 
             // Orca variants
             DexType::OrcaWhirlpools | DexType::OrcaLegacy => {
@@ -681,12 +714,12 @@ impl SwapExecutor {
             }
 
             // Raydium variants (all use same builder)
-            DexType::RaydiumAmmV4 | DexType::RaydiumClmm | DexType::RaydiumCpmm | DexType::RaydiumStable => {
-                self.raydium_builder.estimate_swap_output(
-                    pool_short_id,
-                    amount_in,
-                    swap_a_to_b,
-                )
+            DexType::RaydiumAmmV4
+            | DexType::RaydiumClmm
+            | DexType::RaydiumCpmm
+            | DexType::RaydiumStable => {
+                self.raydium_builder
+                    .estimate_swap_output(pool_short_id, amount_in, swap_a_to_b)
             }
 
             DexType::PumpSwap => {
@@ -698,13 +731,22 @@ impl SwapExecutor {
             DexType::HumidiFi => {
                 // Conservative estimate for HumidiFi dark pool (0.5% slippage - highly efficient)
                 warn!("⚠️ HumidiFi output estimation not yet implemented - using 0.5% slippage estimate (dark pool efficiency)");
-                Ok(amount_in * 995 / 1000)  // HumidiFi is known for very low slippage
+                Ok(amount_in * 995 / 1000) // HumidiFi is known for very low slippage
             }
 
             // Not yet implemented DEXes - conservative estimate
-            DexType::Jupiter | DexType::Serum | DexType::Aldrin | DexType::Saros |
-            DexType::Crema | DexType::Cropper | DexType::Lifinity | DexType::Fluxbeam => {
-                warn!("⚠️ DEX {:?} output estimation not implemented - using 1% slippage estimate", dex_type);
+            DexType::Jupiter
+            | DexType::Serum
+            | DexType::Aldrin
+            | DexType::Saros
+            | DexType::Crema
+            | DexType::Cropper
+            | DexType::Lifinity
+            | DexType::Fluxbeam => {
+                warn!(
+                    "⚠️ DEX {:?} output estimation not implemented - using 1% slippage estimate",
+                    dex_type
+                );
                 Ok(amount_in * 99 / 100)
             }
         }
@@ -718,10 +760,7 @@ impl SwapExecutor {
     ///
     /// # Returns
     /// Minimum output amount accounting for slippage
-    pub fn calculate_min_output_with_slippage(
-        expected_output: u64,
-        slippage_bps: u64,
-    ) -> u64 {
+    pub fn calculate_min_output_with_slippage(expected_output: u64, slippage_bps: u64) -> u64 {
         // Calculate: expected * (10000 - slippage_bps) / 10000
         expected_output
             .saturating_mul(10000 - slippage_bps)
@@ -814,11 +853,7 @@ mod tests {
         let rpc_client = Arc::new(SolanaRpcClient::new(rpc_url));
         let pool_registry = Arc::new(PoolRegistry::new(rpc_client.clone()));
 
-        let executor = SwapExecutor::new(
-            rpc_client,
-            pool_registry,
-            None,
-        ).unwrap();
+        let executor = SwapExecutor::new(rpc_client, pool_registry, None).unwrap();
 
         assert_eq!(executor.compute_unit_price, 1000);
         assert_eq!(executor.compute_unit_limit, 200_000);

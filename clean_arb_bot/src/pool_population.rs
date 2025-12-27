@@ -12,7 +12,7 @@ use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
 use tracing::{info, warn};
 
-use crate::{PoolRegistry, PoolInfo, DexType};
+use crate::{DexType, PoolInfo, PoolRegistry};
 
 /// Populate pool registry with known Meteora DLMM pools
 ///
@@ -33,11 +33,11 @@ pub fn populate_known_pools(pool_registry: Arc<PoolRegistry>) -> Result<()> {
         PoolInfo {
             full_address: "BGm1tav58oGcsQJehL9WXBFXF7D27vZsKefj4xJKD5Y".parse()?,
             dex_type: DexType::MeteoraDammV2,
-            token_a_mint: "So11111111111111111111111111111111111111112".parse()?,  // SOL
-            token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?,  // USDC
+            token_a_mint: "So11111111111111111111111111111111111111112".parse()?, // SOL
+            token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?, // USDC
             reserve_a: "DwZz4S1Z1LBXomzmncQRVKCYhjCqSAMQ6RPKbUAadr7H".parse()?,
             reserve_b: "4N22J4vW2juHocTntJNmXywSonYjkndCwahjZ2cYLDgb".parse()?,
-        }
+        },
     )?;
 
     // 2. JitoSOL-SOL (High Liquidity #2)
@@ -46,11 +46,11 @@ pub fn populate_known_pools(pool_registry: Arc<PoolRegistry>) -> Result<()> {
         PoolInfo {
             full_address: "BoeMUkCLHchTD31HdXsbDExuZZfcUppSLpYtV3LZTH6U".parse()?,
             dex_type: DexType::MeteoraDammV2,
-            token_a_mint: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn".parse()?,  // JitoSOL
+            token_a_mint: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn".parse()?, // JitoSOL
             token_b_mint: "So11111111111111111111111111111111111111112".parse()?,  // SOL
             reserve_a: "93d6ukn24o1xMcMDip2SACKG8GbvhGUZim1e3ZEcQVm2".parse()?,
             reserve_b: "CodroyzrRNvc5kHRoAQYjpVSr1jA9fLcUWVFouiuWGsD".parse()?,
-        }
+        },
     )?;
 
     // 3. SOL-USDC (High Liquidity #3)
@@ -59,11 +59,11 @@ pub fn populate_known_pools(pool_registry: Arc<PoolRegistry>) -> Result<()> {
         PoolInfo {
             full_address: "BVRbyLjjfSBcoyiYFuxbgKYnWuiFaF9CSXEa5vdSZ9Hh".parse()?,
             dex_type: DexType::MeteoraDammV2,
-            token_a_mint: "So11111111111111111111111111111111111111112".parse()?,  // SOL
-            token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?,  // USDC
+            token_a_mint: "So11111111111111111111111111111111111111112".parse()?, // SOL
+            token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?, // USDC
             reserve_a: "FMzVsENjscefpAtUJYBUTeJAYaKNfFQBHjTZE1AQRFYY".parse()?,
             reserve_b: "7du3jFJK4rhf9JnZSQmhr6qPkgdQyJ88528qyxpYPPtL".parse()?,
-        }
+        },
     )?;
 
     // 4. SOL-USDC (High Liquidity #4)
@@ -72,11 +72,11 @@ pub fn populate_known_pools(pool_registry: Arc<PoolRegistry>) -> Result<()> {
         PoolInfo {
             full_address: "HTvjzsfX3yU6BUodCjZ5vZkUrAxMDTrBs3CJaq43ashR".parse()?,
             dex_type: DexType::MeteoraDammV2,
-            token_a_mint: "So11111111111111111111111111111111111111112".parse()?,  // SOL
-            token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?,  // USDC
+            token_a_mint: "So11111111111111111111111111111111111111112".parse()?, // SOL
+            token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?, // USDC
             reserve_a: "H7j5NPopj3tQvDg4N8CxwtYciTn3e8AEV6wSVrxpyDUc".parse()?,
             reserve_b: "HbYjRzx7teCxqW3unpXBEcNHhfVZvW2vW9MQ99TkizWt".parse()?,
-        }
+        },
     )?;
 
     // 5. SOL-USDC (High Liquidity #5)
@@ -85,11 +85,11 @@ pub fn populate_known_pools(pool_registry: Arc<PoolRegistry>) -> Result<()> {
         PoolInfo {
             full_address: "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6".parse()?,
             dex_type: DexType::MeteoraDammV2,
-            token_a_mint: "So11111111111111111111111111111111111111112".parse()?,  // SOL
-            token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?,  // USDC
+            token_a_mint: "So11111111111111111111111111111111111111112".parse()?, // SOL
+            token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?, // USDC
             reserve_a: "EYj9xKw6ZszwpyNibHY7JD5o3QgTVrSdcBp1fMJhrR9o".parse()?,
             reserve_b: "CoaxzEh8p5YyGLcj36Eo3cUThVJxeKCs7qvLAGDYwBcz".parse()?,
-        }
+        },
     )?;
 
     // 6. JUP-SOL
@@ -98,11 +98,11 @@ pub fn populate_known_pools(pool_registry: Arc<PoolRegistry>) -> Result<()> {
         PoolInfo {
             full_address: "C8Gr6AUuq9hEdSYJzoEpNcdjpojPZwqG5MtQbeouNNwg".parse()?,
             dex_type: DexType::MeteoraDammV2,
-            token_a_mint: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN".parse()?,  // JUP
-            token_b_mint: "So11111111111111111111111111111111111111112".parse()?,  // SOL
+            token_a_mint: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN".parse()?, // JUP
+            token_b_mint: "So11111111111111111111111111111111111111112".parse()?, // SOL
             reserve_a: "37XRwFkmrvrh57MuyHJ651qwXikmsUbcH29Uj5USWq1E".parse()?,
             reserve_b: "5rJ5PvB5MyxsyV9VSid2esNLJUykRiq9xcGxnMmoDJhh".parse()?,
-        }
+        },
     )?;
 
     // 7. cbBTC-SOL
@@ -111,11 +111,11 @@ pub fn populate_known_pools(pool_registry: Arc<PoolRegistry>) -> Result<()> {
         PoolInfo {
             full_address: "7wJK6JJQERsyRoDNVnbkDtBKbXfoBV2dw8uP45WD5aC1".parse()?,
             dex_type: DexType::MeteoraDammV2,
-            token_a_mint: "cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij".parse()?,  // cbBTC
-            token_b_mint: "So11111111111111111111111111111111111111112".parse()?,  // SOL
+            token_a_mint: "cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij".parse()?, // cbBTC
+            token_b_mint: "So11111111111111111111111111111111111111112".parse()?, // SOL
             reserve_a: "82gYLm4jD9N6YXU86UJZQ5ziGbNBxpxNgmpe3TNP2Bgr".parse()?,
             reserve_b: "8q5Cpus9iyPRp7KCxFFHJ3fcUcaMtadhzJ2S3YZA1VJ6".parse()?,
-        }
+        },
     )?;
 
     // 8. USDC-USDT (Stablecoin pair for arbitrage)
@@ -124,11 +124,11 @@ pub fn populate_known_pools(pool_registry: Arc<PoolRegistry>) -> Result<()> {
         PoolInfo {
             full_address: "ARwi1S4DaiTG5DX7S4M4ZsrXqpMD1MrTmbu9ue2tpmEq".parse()?,
             dex_type: DexType::MeteoraDammV2,
-            token_a_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?,  // USDC
-            token_b_mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB".parse()?,  // USDT
+            token_a_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?, // USDC
+            token_b_mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB".parse()?, // USDT
             reserve_a: "4STreSrMtf8umxyei9DaZG4bX3HT9hE3TGw3Xz41XNHd".parse()?,
             reserve_b: "GkTrsQsu8WvrbairmN12aUKk74qHivRNFxaT5YxCECKQ".parse()?,
-        }
+        },
     )?;
 
     // 9. JupSOL-SOL
@@ -137,11 +137,11 @@ pub fn populate_known_pools(pool_registry: Arc<PoolRegistry>) -> Result<()> {
         PoolInfo {
             full_address: "bNcdL9Hy85c9qb4hRavAUFtJUiyRPh3u96jerFqZQq6".parse()?,
             dex_type: DexType::MeteoraDammV2,
-            token_a_mint: "jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v".parse()?,  // jupSOL
-            token_b_mint: "So11111111111111111111111111111111111111112".parse()?,  // SOL
+            token_a_mint: "jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v".parse()?, // jupSOL
+            token_b_mint: "So11111111111111111111111111111111111111112".parse()?, // SOL
             reserve_a: "2eF8kcFF6musyQQMckCDriXpirZW6vocJeh6q1noXcNW".parse()?,
             reserve_b: "HTeD5fFp1oCvnNioZFQgXAfuRDzHWpDQS5y7NvsopKXN".parse()?,
-        }
+        },
     )?;
 
     // 10. PUMP-USDC
@@ -150,11 +150,11 @@ pub fn populate_known_pools(pool_registry: Arc<PoolRegistry>) -> Result<()> {
         PoolInfo {
             full_address: "9SMp4yLKGtW9TnLimfVPkDARsyNSfJw43WMke4r7KoZj".parse()?,
             dex_type: DexType::MeteoraDammV2,
-            token_a_mint: "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn".parse()?,  // PUMP
-            token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?,  // USDC
+            token_a_mint: "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn".parse()?, // PUMP
+            token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse()?, // USDC
             reserve_a: "6uVEyA1RRhuTzDroFGBrDsAHwE4b6hCSwgyXAHjTZEUv".parse()?,
             reserve_b: "5RLzTiyGuadAC4SE3s7MGonXszFShJtZewVmmHGUUbkV".parse()?,
-        }
+        },
     )?;
 
     // 11. PUMP-SOL
@@ -163,11 +163,11 @@ pub fn populate_known_pools(pool_registry: Arc<PoolRegistry>) -> Result<()> {
         PoolInfo {
             full_address: "HbjYfcWZBjCBYTJpZkLGxqArVmZVu3mQcRudb6Wg1sVh".parse()?,
             dex_type: DexType::MeteoraDammV2,
-            token_a_mint: "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn".parse()?,  // PUMP
-            token_b_mint: "So11111111111111111111111111111111111111112".parse()?,  // SOL
+            token_a_mint: "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn".parse()?, // PUMP
+            token_b_mint: "So11111111111111111111111111111111111111112".parse()?, // SOL
             reserve_a: "5uXsebqNi3jDBvHvLJUuLqouUEHyQNDZcREHpLSwCZpM".parse()?,
             reserve_b: "CD1RxU49jNwxD7LvRvrdWDNLpx5ZrJ7khMEzTNudk94s".parse()?,
-        }
+        },
     )?;
 
     info!("✅ Registered {} Meteora DLMM pools", 11);

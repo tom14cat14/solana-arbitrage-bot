@@ -31,9 +31,7 @@ pub type SharedCachedBlockhash = Arc<RwLock<Option<CachedBlockhash>>>;
 /// - Save 50-70ms per transaction build (no RPC call)
 /// - Transactions can be built instantly
 /// - Background task handles failures gracefully
-pub fn spawn_blockhash_refresher(
-    rpc_client: Arc<SolanaRpcClient>,
-) -> SharedCachedBlockhash {
+pub fn spawn_blockhash_refresher(rpc_client: Arc<SolanaRpcClient>) -> SharedCachedBlockhash {
     let cached = Arc::new(RwLock::new(None));
     let cached_clone = cached.clone();
 
@@ -52,7 +50,10 @@ pub fn spawn_blockhash_refresher(
                     });
 
                     if consecutive_failures > 0 {
-                        info!("✅ Blockhash refresh recovered after {} failures", consecutive_failures);
+                        info!(
+                            "✅ Blockhash refresh recovered after {} failures",
+                            consecutive_failures
+                        );
                         consecutive_failures = 0;
                     } else {
                         debug!("🔄 Blockhash refreshed: {}", hash);
@@ -61,7 +62,10 @@ pub fn spawn_blockhash_refresher(
                 Err(e) => {
                     consecutive_failures += 1;
                     if consecutive_failures <= 3 {
-                        warn!("⚠️ Failed to refresh blockhash (attempt {}): {}", consecutive_failures, e);
+                        warn!(
+                            "⚠️ Failed to refresh blockhash (attempt {}): {}",
+                            consecutive_failures, e
+                        );
                     } else if consecutive_failures == 10 {
                         warn!("🚨 Blockhash refresh failing ({} consecutive failures) - using stale blockhash", consecutive_failures);
                     }
@@ -96,7 +100,10 @@ pub async fn get_blockhash(
             debug!("⚡ Using cached blockhash (age: {}ms)", age.as_millis());
             return Ok(cached_bh.hash);
         } else {
-            warn!("⚠️ Cached blockhash is stale (age: {}s) - fetching new one", age.as_secs());
+            warn!(
+                "⚠️ Cached blockhash is stale (age: {}s) - fetching new one",
+                age.as_secs()
+            );
         }
     }
 

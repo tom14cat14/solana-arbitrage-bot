@@ -40,7 +40,7 @@ while true; do
     # Check killswitch
     if [ -f "$KILLSWITCH_FILE" ]; then
         echo "🛑 KILLSWITCH ACTIVATED - Stopping bot"
-        echo "Reason: $(cat $KILLSWITCH_FILE)"
+        echo "Reason: $(cat "$KILLSWITCH_FILE")"
         exit 0
     fi
 
@@ -51,7 +51,7 @@ while true; do
         TIME_SINCE_LAST_ACTIVITY=$((CURRENT_TIME - LAST_ACTIVITY_TIME))
 
         # Check for stuck loop (no activity for STUCK_THRESHOLD seconds)
-        if [ $TIME_SINCE_LAST_ACTIVITY -gt $STUCK_THRESHOLD ]; then
+        if [ "$TIME_SINCE_LAST_ACTIVITY" -gt "$STUCK_THRESHOLD" ]; then
             echo "⚠️  STUCK LOOP DETECTED - No activity for ${TIME_SINCE_LAST_ACTIVITY}s"
             echo "Killing stuck bot process..."
             pkill -9 -f "$BINARY" || true
@@ -69,7 +69,7 @@ while true; do
         if [ -f "$LOG_DIR/arb_bot.log" ]; then
             CURRENT_SCAN_COUNT=$(grep -c "Scanning.*tokens for triangle" "$LOG_DIR/arb_bot.log" 2>/dev/null || echo "0")
 
-            if [ $CURRENT_SCAN_COUNT -gt $LAST_SCAN_COUNT ]; then
+            if [ "$CURRENT_SCAN_COUNT" -gt "$LAST_SCAN_COUNT" ]; then
                 # Activity detected
                 LAST_ACTIVITY_TIME=$(date +%s)
                 LAST_SCAN_COUNT=$CURRENT_SCAN_COUNT
@@ -77,12 +77,12 @@ while true; do
             fi
         fi
 
-        sleep $HEALTH_CHECK_INTERVAL
+        sleep "$HEALTH_CHECK_INTERVAL"
         continue
     fi
 
     # Bot is not running, check failure count
-    if [ $FAILURE_COUNT -ge $MAX_CONSECUTIVE_FAILURES ]; then
+    if [ "$FAILURE_COUNT" -ge "$MAX_CONSECUTIVE_FAILURES" ]; then
         echo "🛑 MAX FAILURES REACHED ($MAX_CONSECUTIVE_FAILURES) - Activating killswitch"
         echo "Too many consecutive failures (${FAILURE_COUNT})" > "$KILLSWITCH_FILE"
         exit 1
@@ -112,16 +112,16 @@ while true; do
     sleep 5
 
     # Check if bot is still running
-    if ! kill -0 $BOT_PID 2>/dev/null; then
+    if ! kill -0 "$BOT_PID" 2>/dev/null; then
         # Bot crashed immediately
         FAILURE_COUNT=$((FAILURE_COUNT + 1))
         echo "❌ Bot crashed immediately (failure $FAILURE_COUNT/$MAX_CONSECUTIVE_FAILURES)"
 
         # Exponential backoff
         echo "Waiting ${BACKOFF_SECONDS}s before retry..."
-        sleep $BACKOFF_SECONDS
+        sleep "$BACKOFF_SECONDS"
         BACKOFF_SECONDS=$((BACKOFF_SECONDS * 2))
-        if [ $BACKOFF_SECONDS -gt 60 ]; then
+        if [ "$BACKOFF_SECONDS" -gt 60 ]; then
             BACKOFF_SECONDS=60  # Cap at 1 minute
         fi
     else
@@ -130,7 +130,7 @@ while true; do
         BACKOFF_SECONDS=1  # Reset backoff
 
         # Wait for bot process to exit
-        wait $BOT_PID
+        wait "$BOT_PID"
         EXIT_CODE=$?
 
         TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')

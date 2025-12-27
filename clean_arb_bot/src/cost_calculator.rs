@@ -102,12 +102,12 @@ impl ArbitrageCosts {
             let base_tip_99 = if let Some(floor) = tip_floor {
                 floor.competitive_tip_99()
             } else {
-                10_000_000_u64  // Fallback: 10M lamports (conservative 99th)
+                10_000_000_u64 // Fallback: 10M lamports (conservative 99th)
             };
 
             // Estimate total fees with base 99th percentile tip to calculate margin
             let estimated_dex_fees = (expected_profit_lamports as f64 * 0.0075) as u64;
-            let estimated_gas = (base_tip_99 as f64 * 1.5) as u64;  // Gas is 1.5x tip
+            let estimated_gas = (base_tip_99 as f64 * 1.5) as u64; // Gas is 1.5x tip
             let total_fees_base = estimated_dex_fees + estimated_gas + base_tip_99;
             let fee_percentage = (total_fees_base as f64 / expected_profit_lamports as f64) * 100.0;
 
@@ -119,15 +119,16 @@ impl ArbitrageCosts {
             let base_tip_99 = if let Some(floor) = tip_floor {
                 floor.competitive_tip_99()
             } else {
-                10_000_000_u64  // Fallback: 10M lamports for 99th
+                10_000_000_u64 // Fallback: 10M lamports for 99th
             };
 
             // ALWAYS USE 99TH PERCENTILE - no interpolation, no cost cutting
             let percentile_tip = base_tip_99;
 
             // Still apply 10% minimum from profit for very small arbs
-            let min_tip_percentage = 0.10;  // 10% minimum
-            let base_tip_from_profit = (expected_profit_lamports as f64 * min_tip_percentage) as u64;
+            let min_tip_percentage = 0.10; // 10% minimum
+            let base_tip_from_profit =
+                (expected_profit_lamports as f64 * min_tip_percentage) as u64;
 
             // Use the HIGHER of profit-based or dynamic percentile
             let base_tip = base_tip_from_profit.max(percentile_tip);
@@ -146,19 +147,21 @@ impl ArbitrageCosts {
 
             // Maximum: Cap at 17% of total estimated profit (user requirement)
             // This prevents over-paying even on 99th percentile for very profitable trades
-            let max_tip_profit_cap = (expected_profit_lamports as f64 * 0.17) as u64;  // 17% of profit
+            let max_tip_profit_cap = (expected_profit_lamports as f64 * 0.17) as u64; // 17% of profit
 
             // Also cap at 30% of net profit (after fees) for safety
             let net_profit_estimate = expected_profit_lamports
                 .saturating_sub(estimated_dex_fees)
                 .saturating_sub(estimated_gas);
-            let max_tip_net_cap = net_profit_estimate * 30 / 100;  // 30% of net profit
+            let max_tip_net_cap = net_profit_estimate * 30 / 100; // 30% of net profit
 
             // Absolute cap: 0.005 SOL (user requirement)
-            let absolute_max_tip = 5_000_000_u64;  // 0.005 SOL
+            let absolute_max_tip = 5_000_000_u64; // 0.005 SOL
 
             // Use the most restrictive cap
-            let max_tip = max_tip_profit_cap.min(max_tip_net_cap).min(absolute_max_tip);
+            let max_tip = max_tip_profit_cap
+                .min(max_tip_net_cap)
+                .min(absolute_max_tip);
 
             // Calculate tip with caps, BUT ensure dynamic percentile is ALWAYS the floor
             // This ensures competitive bundle landing appropriate for profit size
@@ -172,7 +175,7 @@ impl ArbitrageCosts {
 
             // PRODUCTION LOGGING: Track tip calculation (ALWAYS 99th percentile)
             let tip_percentage = (final_tip as f64 / expected_profit_lamports as f64) * 100.0;
-            let was_capped = final_tip == absolute_max_tip;  // Check if 0.005 SOL cap was applied
+            let was_capped = final_tip == absolute_max_tip; // Check if 0.005 SOL cap was applied
             let at_percentile_floor = final_tip == percentile_tip && capped_tip < percentile_tip;
 
             debug!("💰 Aggressive tip (99TH): Profit {:.6} SOL | Fee margin: {:.1}% → Tip {:.6} SOL ({:.2}% of profit){}{}",
@@ -191,8 +194,9 @@ impl ArbitrageCosts {
         // So gas should be ~1.5x the tip amount
         let profit_sol = expected_profit_lamports as f64 / 1_000_000_000.0;
 
-        // Calculate target gas as 1.5x JITO tip
-        let target_gas_lamports = (jito_tip_lamports as f64 * 1.5) as u64;
+        // Calculate target gas as 1.5x JITO tip, with minimum floor for 3-swap arbitrage
+        // Minimum 20,000 lamports covers: base tx fee (5k) + compute budget for 3 swaps (15k)
+        let target_gas_lamports = ((jito_tip_lamports as f64 * 1.5) as u64).max(20_000);
 
         // Split between base tx fee (70%) and compute fee (30%)
         let base_tx_fee_lamports = (target_gas_lamports as f64 * 0.7) as u64;
@@ -233,11 +237,13 @@ impl ArbitrageCosts {
 
         debug!("📊 Cost breakdown: Gross {:.6} SOL | Costs {:.6} SOL | Net {:.6} SOL ({:.1}% retention)",
                profit_sol, total_cost_sol, net_profit_sol, retention_pct);
-        debug!("   DEX fees: {:.6} SOL, JITO tip: {:.6} SOL, Gas: {:.6} SOL, Priority: {:.6} SOL",
-               dex_fee_lamports as f64 / 1e9,
-               jito_tip_lamports as f64 / 1e9,
-               (base_tx_fee_lamports + compute_fee_lamports) as f64 / 1e9,
-               priority_fee_lamports as f64 / 1e9);
+        debug!(
+            "   DEX fees: {:.6} SOL, JITO tip: {:.6} SOL, Gas: {:.6} SOL, Priority: {:.6} SOL",
+            dex_fee_lamports as f64 / 1e9,
+            jito_tip_lamports as f64 / 1e9,
+            (base_tx_fee_lamports + compute_fee_lamports) as f64 / 1e9,
+            priority_fee_lamports as f64 / 1e9
+        );
 
         Self {
             dex_fee_lamports,
@@ -272,10 +278,7 @@ impl ArbitrageCosts {
     /// // because: gross * 0.9 (after 10% tip) = 100M net
     /// // so: gross = 100M / 0.9 = 111.11M
     /// ```
-    pub fn min_gross_profit_for_net(
-        desired_net_profit_lamports: u64,
-        use_jito: bool,
-    ) -> u64 {
+    pub fn min_gross_profit_for_net(desired_net_profit_lamports: u64, use_jito: bool) -> u64 {
         if use_jito {
             // With JITO: tip = 10% of gross, so net = gross * 0.9 - fixed_costs
             // Solving: net = gross * 0.9 - fixed_costs
@@ -336,7 +339,8 @@ impl ArbitrageCosts {
             return (0.0, 0.0);
         }
 
-        let gas_cost = self.base_tx_fee_lamports + self.compute_fee_lamports + self.priority_fee_lamports;
+        let gas_cost =
+            self.base_tx_fee_lamports + self.compute_fee_lamports + self.priority_fee_lamports;
         let tip_cost = self.jito_tip_lamports;
 
         let gas_percentage = (gas_cost as f64 / self.total_cost_lamports as f64) * 100.0;

@@ -36,8 +36,27 @@
 
 ## 🎯 CURRENT STATUS
 
+### **⚠️ BLOCKER: ShredStream Service Price Wiring** ⚠️
+
+**Status**: Arb Bot is ready, but waiting for ShredStream Service to complete price wiring
+
+**What's Blocking**:
+- ShredStream Service infrastructure is complete ✅
+- Price calculation pipeline needs to be simplified (currently showing 0.0 prices)
+- Need to implement Jupiter-primary architecture (use Jupiter for prices, ShredStream for detection)
+
+**📝 Pick Up Here**: [`/shared/shredstream_service/PRICE_WIRING_SESSION_2025_11_07.md`](/home/tom14cat14/shared/shredstream_service/PRICE_WIRING_SESSION_2025_11_07.md) ⭐
+
+**Next Steps (2-3 hours)**:
+1. Wire up Jupiter prices directly in ShredStream Service
+2. Test price API returns non-zero prices
+3. Configure Arb Bot to use `http://localhost:8080/prices`
+4. Test integration end-to-end
+
+---
+
 ### **Clean Arb Bot - Production Ready** ✅
-- **Status**: Live trading capable with real money
+- **Status**: Live trading capable with real money (waiting for ShredStream Service)
 - **Location**: `/clean_arb_bot/`
 - **GitHub**: https://github.com/tom14cat14/solana-arbitrage-bot
 

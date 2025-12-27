@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use std::env;
 
 /// Configuration for the arbitrage bot
@@ -8,7 +8,7 @@ pub struct Config {
     pub solana_rpc_url: Option<String>,
     pub capital_sol: f64,
     pub max_position_size_sol: f64,
-    pub min_profit_margin_multiplier: f64,  // Replaced min_profit_sol with margin multiplier
+    pub min_profit_margin_multiplier: f64, // Replaced min_profit_sol with margin multiplier
     pub min_spread_percentage: f64,
     pub max_daily_trades: u64,
     pub daily_loss_limit_sol: f64,
@@ -37,7 +37,7 @@ impl Config {
         if gross_profit_sol < 0.1 {
             // Small profits: 3-5% tip
             let tip = gross_profit_sol * 0.03;
-            tip.min(0.001).max(0.0001)  // Cap at 0.001 SOL, min 0.0001 SOL
+            tip.min(0.001).max(0.0001) // Cap at 0.001 SOL, min 0.0001 SOL
         } else if gross_profit_sol < 1.0 {
             // Medium profits: 5-7% tip
             let tip = gross_profit_sol * 0.05;
@@ -52,8 +52,8 @@ impl Config {
     /// Calculate total fees for a trade (JITO tip + gas + compute)
     pub fn calculate_total_fees(&self, gross_profit_sol: f64) -> f64 {
         let jito_tip = self.calculate_jito_tip(gross_profit_sol);
-        let gas_fee = 0.00005;  // ~50,000 lamports typical
-        let compute_fee = 0.00001;  // ~10,000 lamports typical
+        let gas_fee = 0.00005; // ~50,000 lamports typical
+        let compute_fee = 0.00001; // ~10,000 lamports typical
         jito_tip + gas_fee + compute_fee
     }
 
@@ -62,7 +62,7 @@ impl Config {
     /// This ensures we beat fees AND have a small safety margin
     pub fn calculate_min_acceptable_profit(&self, gross_profit_sol: f64) -> f64 {
         let total_fees = self.calculate_total_fees(gross_profit_sol);
-        let margin = 0.005 * gross_profit_sol;  // 0.5% of gross profit
+        let margin = 0.005 * gross_profit_sol; // 0.5% of gross profit
         total_fees + margin
     }
 
@@ -87,7 +87,7 @@ impl Config {
     pub fn is_profitable_after_fees(&self, gross_profit_sol: f64) -> bool {
         let total_fees = self.calculate_total_fees(gross_profit_sol);
         let net_profit = gross_profit_sol - total_fees;
-        let required_margin = 0.005 * gross_profit_sol;  // 0.5% of gross as safety margin
+        let required_margin = 0.005 * gross_profit_sol; // 0.5% of gross as safety margin
         net_profit >= (total_fees + required_margin)
     }
 }
@@ -108,10 +108,15 @@ impl Config {
     /// - Blocks injection attacks via newline, carriage return, or null characters
     fn validate_url(url: &str, name: &str) -> Result<()> {
         // Check for basic URL structure
-        if !url.starts_with("http://") && !url.starts_with("https://") && !url.starts_with("ws://") && !url.starts_with("wss://") {
+        if !url.starts_with("http://")
+            && !url.starts_with("https://")
+            && !url.starts_with("ws://")
+            && !url.starts_with("wss://")
+        {
             return Err(anyhow::anyhow!(
                 "Invalid {}: must start with http://, https://, ws://, or wss:// (got: {})",
-                name, url
+                name,
+                url
             ));
         }
 
@@ -148,9 +153,9 @@ impl Config {
         }
 
         // Check for valid base58 characters
-        if !key.chars().all(|c| {
-            matches!(c, '1'..='9' | 'A'..='H' | 'J'..='N' | 'P'..='Z' | 'a'..='k' | 'm'..='z')
-        }) {
+        if !key.chars().all(
+            |c| matches!(c, '1'..='9' | 'A'..='H' | 'J'..='N' | 'P'..='Z' | 'a'..='k' | 'm'..='z'),
+        ) {
             return Err(anyhow::anyhow!(
                 "Invalid wallet private key: contains non-base58 characters"
             ));
@@ -225,12 +230,12 @@ impl Config {
                 .context("Failed to parse MAX_POSITION_SIZE_SOL: must be a valid number")?,
 
             min_profit_margin_multiplier: env::var("MIN_PROFIT_MARGIN_MULTIPLIER")
-                .unwrap_or_else(|_| "2.0".to_string())  // Default: 2x fees (100% margin)
+                .unwrap_or_else(|_| "2.0".to_string()) // Default: 2x fees (100% margin)
                 .parse()
                 .context("Failed to parse MIN_PROFIT_MARGIN_MULTIPLIER: must be a valid number")?,
 
             min_spread_percentage: env::var("MIN_SPREAD_PERCENTAGE")
-                .unwrap_or_else(|_| "0.3".to_string())  // HIGH FIX: 0.3% - realistic for cross-DEX arbitrage
+                .unwrap_or_else(|_| "0.3".to_string()) // HIGH FIX: 0.3% - realistic for cross-DEX arbitrage
                 .parse()
                 .context("Failed to parse MIN_SPREAD_PERCENTAGE: must be a valid number")?,
 
@@ -245,17 +250,19 @@ impl Config {
                 .context("Failed to parse DAILY_LOSS_LIMIT_SOL: must be a valid number")?,
 
             max_consecutive_failures: env::var("MAX_CONSECUTIVE_FAILURES")
-                .unwrap_or_else(|_| "100".to_string())  // Increased for market chaos - keep running!
+                .unwrap_or_else(|_| "100".to_string()) // Increased for market chaos - keep running!
                 .parse()
                 .context("Failed to parse MAX_CONSECUTIVE_FAILURES: must be a valid integer")?,
 
             enable_real_trading: env::var("ENABLE_REAL_TRADING")
                 .unwrap_or_else(|_| "false".to_string())
-                .to_lowercase() == "true",
+                .to_lowercase()
+                == "true",
 
             paper_trading: env::var("PAPER_TRADING")
                 .unwrap_or_else(|_| "true".to_string())
-                .to_lowercase() == "true",
+                .to_lowercase()
+                == "true",
 
             wallet_private_key,
 
@@ -327,7 +334,9 @@ impl Config {
             return Err(anyhow::anyhow!("max_position_size_sol must be finite"));
         }
         if !self.min_profit_margin_multiplier.is_finite() {
-            return Err(anyhow::anyhow!("min_profit_margin_multiplier must be finite"));
+            return Err(anyhow::anyhow!(
+                "min_profit_margin_multiplier must be finite"
+            ));
         }
         if !self.min_spread_percentage.is_finite() {
             return Err(anyhow::anyhow!("min_spread_percentage must be finite"));

@@ -42,7 +42,7 @@ fi
 tmux new-session -d -s "$SESSION_NAME" -c "$BOT_DIR"
 
 # Set up the environment and start the bot with watchdog
-tmux send-keys -t "$SESSION_NAME" "cd $BOT_DIR" C-m
+tmux send-keys -t "$SESSION_NAME" "cd \"$BOT_DIR\"" C-m
 tmux send-keys -t "$SESSION_NAME" "source .env 2>/dev/null || true" C-m
 tmux send-keys -t "$SESSION_NAME" "./production/watchdog.sh" C-m
 

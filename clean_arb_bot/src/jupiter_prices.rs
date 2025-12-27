@@ -128,7 +128,10 @@ pub async fn find_jupiter_arbitrage(
     token_mints.sort();
     token_mints.dedup();
 
-    debug!("🔍 Comparing {} tokens: ShredStream vs Jupiter", token_mints.len());
+    debug!(
+        "🔍 Comparing {} tokens: ShredStream vs Jupiter",
+        token_mints.len()
+    );
 
     // Rate limiting: Jupiter allows 50 requests per 10 seconds
     // To be safe with other bots: limit to 5 batches per scan (5 requests)
@@ -139,8 +142,11 @@ pub async fn find_jupiter_arbitrage(
     let mut batch_count = 0;
     for chunk in token_mints.chunks(BATCH_SIZE) {
         if batch_count >= MAX_BATCHES_PER_SCAN {
-            debug!("⏸️ Rate limit: stopping at {} tokens ({} batches)",
-                batch_count * BATCH_SIZE, batch_count);
+            debug!(
+                "⏸️ Rate limit: stopping at {} tokens ({} batches)",
+                batch_count * BATCH_SIZE,
+                batch_count
+            );
             break;
         }
 
@@ -176,11 +182,20 @@ pub async fn find_jupiter_arbitrage(
                 }
 
                 // Determine direction and calculate profit
-                let (direction, _buy_price, _sell_price) = if jupiter_price > shredstream_price.price_sol {
-                    ("buy_shredstream_sell_jupiter", shredstream_price.price_sol, jupiter_price)
-                } else {
-                    ("buy_jupiter_sell_shredstream", jupiter_price, shredstream_price.price_sol)
-                };
+                let (direction, _buy_price, _sell_price) =
+                    if jupiter_price > shredstream_price.price_sol {
+                        (
+                            "buy_shredstream_sell_jupiter",
+                            shredstream_price.price_sol,
+                            jupiter_price,
+                        )
+                    } else {
+                        (
+                            "buy_jupiter_sell_shredstream",
+                            jupiter_price,
+                            shredstream_price.price_sol,
+                        )
+                    };
 
                 // Estimate profit (simplified)
                 let gross_profit = capital_sol * (spread_percentage / 100.0);
@@ -210,7 +225,10 @@ pub async fn find_jupiter_arbitrage(
     });
 
     if !opportunities.is_empty() {
-        debug!("🎯 Found {} Jupiter arbitrage opportunities", opportunities.len());
+        debug!(
+            "🎯 Found {} Jupiter arbitrage opportunities",
+            opportunities.len()
+        );
     }
 
     Ok(opportunities)

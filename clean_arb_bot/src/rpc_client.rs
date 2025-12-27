@@ -8,17 +8,14 @@
 
 use anyhow::{Context, Result};
 use solana_client::rpc_client::RpcClient;
+use solana_client::rpc_config::RpcSimulateTransactionConfig;
 use solana_sdk::{
-    commitment_config::CommitmentConfig,
-    hash::Hash,
-    pubkey::Pubkey,
-    signature::Signature,
+    commitment_config::CommitmentConfig, hash::Hash, pubkey::Pubkey, signature::Signature,
     transaction::Transaction,
 };
-use solana_client::rpc_config::RpcSimulateTransactionConfig;
-use tracing::{debug, info, warn, error, trace};
-use std::time::Duration;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
+use tracing::{debug, error, info, trace, warn};
 
 /// CYCLE-5 FIX: RPC circuit breaker threshold
 /// Halts trading after this many consecutive RPC failures to prevent losses during network issues
@@ -29,7 +26,7 @@ const CIRCUIT_BREAKER_THRESHOLD: u32 = 5;
 pub struct SolanaRpcClient {
     client: RpcClient,
     commitment: CommitmentConfig,
-    consecutive_failures: AtomicU32,  // CYCLE-5: Track consecutive RPC failures
+    consecutive_failures: AtomicU32, // CYCLE-5: Track consecutive RPC failures
 }
 
 impl SolanaRpcClient {
@@ -43,7 +40,7 @@ impl SolanaRpcClient {
         Self {
             client,
             commitment,
-            consecutive_failures: AtomicU32::new(0),  // CYCLE-5: Initialize circuit breaker
+            consecutive_failures: AtomicU32::new(0), // CYCLE-5: Initialize circuit breaker
         }
     }
 
@@ -53,7 +50,10 @@ impl SolanaRpcClient {
         let failures = self.consecutive_failures.load(Ordering::Relaxed);
 
         if failures >= CIRCUIT_BREAKER_THRESHOLD {
-            error!("🚨 RPC CIRCUIT BREAKER TRIPPED: {} consecutive failures", failures);
+            error!(
+                "🚨 RPC CIRCUIT BREAKER TRIPPED: {} consecutive failures",
+                failures
+            );
             error!("   Trading halted to prevent losses during network issues");
             error!("   Manual intervention required - check RPC endpoint and restart bot");
 
@@ -70,7 +70,10 @@ impl SolanaRpcClient {
     fn record_success(&self) {
         let previous = self.consecutive_failures.swap(0, Ordering::Relaxed);
         if previous > 0 {
-            info!("✅ RPC recovered after {} failures - circuit breaker reset", previous);
+            info!(
+                "✅ RPC recovered after {} failures - circuit breaker reset",
+                previous
+            );
         }
     }
 
@@ -79,11 +82,15 @@ impl SolanaRpcClient {
         let failures = self.consecutive_failures.fetch_add(1, Ordering::Relaxed) + 1;
 
         if failures >= CIRCUIT_BREAKER_THRESHOLD {
-            error!("🚨 RPC CIRCUIT BREAKER ABOUT TO TRIP: {}/{} failures",
-                failures, CIRCUIT_BREAKER_THRESHOLD);
+            error!(
+                "🚨 RPC CIRCUIT BREAKER ABOUT TO TRIP: {}/{} failures",
+                failures, CIRCUIT_BREAKER_THRESHOLD
+            );
         } else if failures > 2 {
-            warn!("⚠️ RPC failures increasing: {}/{} (circuit breaker will trip at {})",
-                failures, CIRCUIT_BREAKER_THRESHOLD, CIRCUIT_BREAKER_THRESHOLD);
+            warn!(
+                "⚠️ RPC failures increasing: {}/{} (circuit breaker will trip at {})",
+                failures, CIRCUIT_BREAKER_THRESHOLD, CIRCUIT_BREAKER_THRESHOLD
+            );
         }
     }
 
@@ -98,7 +105,7 @@ impl SolanaRpcClient {
             match self.client.get_latest_blockhash() {
                 Ok(blockhash) => {
                     debug!("✅ Got blockhash: {}", blockhash);
-                    self.record_success();  // CYCLE-5: Reset circuit breaker on success
+                    self.record_success(); // CYCLE-5: Reset circuit breaker on success
                     return Ok(blockhash);
                 }
                 Err(e) => {
@@ -108,25 +115,37 @@ impl SolanaRpcClient {
                         || e.to_string().contains("connection");
 
                     if !is_transient || attempt == 3 {
-                        self.record_failure();  // CYCLE-5: Increment circuit breaker on failure
-                        return Err(anyhow::anyhow!("Failed to fetch latest blockhash after {} attempts: {}", attempt, e));
+                        self.record_failure(); // CYCLE-5: Increment circuit breaker on failure
+                        return Err(anyhow::anyhow!(
+                            "Failed to fetch latest blockhash after {} attempts: {}",
+                            attempt,
+                            e
+                        ));
                     }
 
                     // Exponential backoff: 100ms, 200ms, 400ms
                     let delay_ms = 100 * (1 << (attempt - 1));
-                    warn!("⚠️ Blockhash fetch attempt {} failed, retrying in {}ms: {}", attempt, delay_ms, e);
+                    warn!(
+                        "⚠️ Blockhash fetch attempt {} failed, retrying in {}ms: {}",
+                        attempt, delay_ms, e
+                    );
                     std::thread::sleep(Duration::from_millis(delay_ms));
                 }
             }
         }
 
-        self.record_failure();  // CYCLE-5: Increment on final failure
-        Err(anyhow::anyhow!("Failed to fetch latest blockhash after retries"))
+        self.record_failure(); // CYCLE-5: Increment on final failure
+        Err(anyhow::anyhow!(
+            "Failed to fetch latest blockhash after retries"
+        ))
     }
 
     /// Simulate transaction before sending (critical for safety)
     pub fn simulate_transaction(&self, transaction: &Transaction) -> Result<bool> {
-        debug!("Simulating transaction with {} instructions...", transaction.message.instructions.len());
+        debug!(
+            "Simulating transaction with {} instructions...",
+            transaction.message.instructions.len()
+        );
 
         let config = RpcSimulateTransactionConfig {
             sig_verify: false,
@@ -134,7 +153,10 @@ impl SolanaRpcClient {
             ..Default::default()
         };
 
-        match self.client.simulate_transaction_with_config(transaction, config) {
+        match self
+            .client
+            .simulate_transaction_with_config(transaction, config)
+        {
             Ok(response) => {
                 if let Some(err) = response.value.err {
                     warn!("❌ Transaction simulation failed: {:?}", err);
@@ -143,7 +165,10 @@ impl SolanaRpcClient {
                     if let Some(logs) = &response.value.logs {
                         warn!("📋 Failed transaction logs:");
                         for (i, log) in logs.iter().enumerate() {
-                            if log.contains("Error") || log.contains("failed") || log.contains("insufficient") {
+                            if log.contains("Error")
+                                || log.contains("failed")
+                                || log.contains("insufficient")
+                            {
                                 warn!("   [{}] {}", i, log);
                             }
                         }
@@ -197,7 +222,8 @@ impl SolanaRpcClient {
     pub fn send_transaction(&self, transaction: &Transaction) -> Result<Signature> {
         debug!("Sending transaction to blockchain...");
 
-        let signature = self.client
+        let signature = self
+            .client
             .send_transaction(transaction)
             .context("Failed to send transaction")?;
 
@@ -216,7 +242,7 @@ impl SolanaRpcClient {
             match self.client.get_account(pubkey) {
                 Ok(account) => {
                     debug!("✅ Got {} bytes of account data", account.data.len());
-                    self.record_success();  // CYCLE-5: Reset circuit breaker on success
+                    self.record_success(); // CYCLE-5: Reset circuit breaker on success
                     return Ok(account.data);
                 }
                 Err(e) => {
@@ -235,27 +261,38 @@ impl SolanaRpcClient {
                         || e.to_string().contains("connection");
 
                     if !is_transient || attempt == 3 {
-                        self.record_failure();  // CYCLE-5: Increment circuit breaker on failure
-                        return Err(anyhow::anyhow!("Failed to fetch account {} after {} attempts: {}", pubkey, attempt, e));
+                        self.record_failure(); // CYCLE-5: Increment circuit breaker on failure
+                        return Err(anyhow::anyhow!(
+                            "Failed to fetch account {} after {} attempts: {}",
+                            pubkey,
+                            attempt,
+                            e
+                        ));
                     }
 
                     // Exponential backoff: 100ms, 200ms, 400ms
                     let delay_ms = 100 * (1 << (attempt - 1));
-                    warn!("⚠️ Account fetch attempt {} failed, retrying in {}ms: {}", attempt, delay_ms, e);
+                    warn!(
+                        "⚠️ Account fetch attempt {} failed, retrying in {}ms: {}",
+                        attempt, delay_ms, e
+                    );
                     std::thread::sleep(Duration::from_millis(delay_ms));
                 }
             }
         }
 
-        self.record_failure();  // CYCLE-5: Increment on final failure
-        Err(anyhow::anyhow!("Failed to fetch account data after retries"))
+        self.record_failure(); // CYCLE-5: Increment on final failure
+        Err(anyhow::anyhow!(
+            "Failed to fetch account data after retries"
+        ))
     }
 
     /// Fetch multiple accounts in one RPC call (efficient)
     pub fn get_multiple_accounts(&self, pubkeys: &[Pubkey]) -> Result<Vec<Option<Vec<u8>>>> {
         debug!("Fetching {} accounts in batch...", pubkeys.len());
 
-        let accounts = self.client
+        let accounts = self
+            .client
             .get_multiple_accounts(pubkeys)
             .context("Failed to fetch multiple accounts")?;
 
@@ -282,10 +319,11 @@ impl SolanaRpcClient {
                 } else {
                     Ok(true)
                 }
-            },
+            }
             Err(e) => {
                 // Check if it's "account not found" error vs other errors
-                if e.to_string().contains("AccountNotFound") || e.to_string().contains("not found") {
+                if e.to_string().contains("AccountNotFound") || e.to_string().contains("not found")
+                {
                     Ok(false)
                 } else {
                     Err(anyhow::anyhow!("Error checking account existence: {}", e))
@@ -296,7 +334,8 @@ impl SolanaRpcClient {
 
     /// Get account owner (program that owns this account)
     pub fn get_account_owner(&self, pubkey: &Pubkey) -> Result<Pubkey> {
-        let account = self.client
+        let account = self
+            .client
             .get_account(pubkey)
             .context(format!("Failed to fetch account {}", pubkey))?;
 
@@ -322,7 +361,8 @@ impl SolanaRpcClient {
 
     /// Get balance of an account (in lamports)
     pub fn get_balance(&self, pubkey: &Pubkey) -> Result<u64> {
-        let balance = self.client
+        let balance = self
+            .client
             .get_balance(pubkey)
             .context(format!("Failed to get balance for {}", pubkey))?;
 
@@ -345,7 +385,8 @@ impl SolanaRpcClient {
 
     /// Get current slot
     pub fn get_slot(&self) -> Result<u64> {
-        let slot = self.client
+        let slot = self
+            .client
             .get_slot()
             .context("Failed to get current slot")?;
 

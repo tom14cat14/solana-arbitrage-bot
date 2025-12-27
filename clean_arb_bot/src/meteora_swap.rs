@@ -1,11 +1,9 @@
 //! Meteora DAMM V2 (LB-CLMM) Swap Implementation - Client Side
 //! Complete implementation using manual instruction building for client-side execution
 
-use std::str::FromStr;
-use std::sync::Arc;
-use anyhow::{anyhow, Result};
-use borsh::{BorshSerialize, BorshDeserialize};
 use crate::SolanaRpcClient;
+use anyhow::{anyhow, Result};
+use borsh::{BorshDeserialize, BorshSerialize};
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
@@ -14,6 +12,8 @@ use solana_sdk::{
 };
 use spl_associated_token_account::get_associated_token_address;
 use spl_token::id as token_program_id;
+use std::str::FromStr;
+use std::sync::Arc;
 use tracing::{info, warn};
 
 // Meteora LB-CLMM program ID (mainnet)
@@ -37,7 +37,8 @@ async fn get_pool_token_mints(
     pool_address: &Pubkey,
 ) -> Result<(Pubkey, Pubkey)> {
     // Fetch pool account data
-    let account_data = rpc_client.get_account_data(pool_address)
+    let account_data = rpc_client
+        .get_account_data(pool_address)
         .map_err(|e| anyhow!("Failed to fetch pool account: {}", e))?;
 
     // For Meteora LB pair, token mints are at specific offsets in account data
@@ -48,13 +49,13 @@ async fn get_pool_token_mints(
 
     // Token X mint is at offset 8 (after discriminator)
     let token_x_bytes = &account_data[8..40];
-    let token_x_mint = Pubkey::try_from(token_x_bytes)
-        .map_err(|_| anyhow!("Invalid token X mint bytes"))?;
+    let token_x_mint =
+        Pubkey::try_from(token_x_bytes).map_err(|_| anyhow!("Invalid token X mint bytes"))?;
 
     // Token Y mint is at offset 40
     let token_y_bytes = &account_data[40..72];
-    let token_y_mint = Pubkey::try_from(token_y_bytes)
-        .map_err(|_| anyhow!("Invalid token Y mint bytes"))?;
+    let token_y_mint =
+        Pubkey::try_from(token_y_bytes).map_err(|_| anyhow!("Invalid token Y mint bytes"))?;
 
     Ok((token_x_mint, token_y_mint))
 }
@@ -66,7 +67,7 @@ pub async fn build_meteora_swap_instruction(
     position_size_lamports: u64,
     user_wallet: &Pubkey,
     slippage_tolerance: f64,
-    swap_for_y: bool,  // true = X to Y, false = Y to X
+    swap_for_y: bool, // true = X to Y, false = Y to X
 ) -> Result<Instruction> {
     info!("🏗️ Building Meteora swap instruction:");
     info!("   Pool: {}", pool_address);
@@ -93,26 +94,21 @@ pub async fn build_meteora_swap_instruction(
     info!("💰 Trade parameters:");
     info!("   Input: {} lamports", position_size_lamports);
     info!("   Min output: {} lamports", min_amount_out);
-    info!("   Direction: {} -> {}",
-          if swap_for_y { "X" } else { "Y" },
-          if swap_for_y { "Y" } else { "X" });
+    info!(
+        "   Direction: {} -> {}",
+        if swap_for_y { "X" } else { "Y" },
+        if swap_for_y { "Y" } else { "X" }
+    );
 
     // Derive reserve PDAs (standard derivation for Meteora)
-    let (reserve_x, _) = Pubkey::find_program_address(
-        &[b"reserve_x", lb_pair.as_ref()],
-        &program_id,
-    );
+    let (reserve_x, _) =
+        Pubkey::find_program_address(&[b"reserve_x", lb_pair.as_ref()], &program_id);
 
-    let (reserve_y, _) = Pubkey::find_program_address(
-        &[b"reserve_y", lb_pair.as_ref()],
-        &program_id,
-    );
+    let (reserve_y, _) =
+        Pubkey::find_program_address(&[b"reserve_y", lb_pair.as_ref()], &program_id);
 
     // Derive oracle PDA
-    let (oracle, _) = Pubkey::find_program_address(
-        &[b"oracle", lb_pair.as_ref()],
-        &program_id,
-    );
+    let (oracle, _) = Pubkey::find_program_address(&[b"oracle", lb_pair.as_ref()], &program_id);
 
     // Build instruction data
     let swap_data = SwapInstructionData {
@@ -122,37 +118,46 @@ pub async fn build_meteora_swap_instruction(
 
     // Meteora swap discriminator (from IDL) - this is the instruction selector
     // For swap instruction, discriminator is typically the first 8 bytes of SHA256("global:swap")
-    let mut data = vec![0xf8, 0xc6, 0x9e, 0x91, 0xe1, 0x75, 0x87, 0xc8];  // swap discriminator
+    let mut data = vec![0xf8, 0xc6, 0x9e, 0x91, 0xe1, 0x75, 0x87, 0xc8]; // swap discriminator
     data.extend_from_slice(&swap_data.try_to_vec()?);
 
     // Build accounts array for swap instruction (OFFICIAL lb_clmm SDK order)
     // Reference: lb_clmm-0.1.1/src/instructions/swap.rs
     let accounts = vec![
         // Core accounts
-        AccountMeta::new(lb_pair, false),                           // 0. lb_pair
+        AccountMeta::new(lb_pair, false), // 0. lb_pair
         // Note: bin_array_bitmap_extension is optional, skip for now
-        AccountMeta::new(reserve_x, false),                         // 1. reserve_x
-        AccountMeta::new(reserve_y, false),                         // 2. reserve_y
-
+        AccountMeta::new(reserve_x, false), // 1. reserve_x
+        AccountMeta::new(reserve_y, false), // 2. reserve_y
         // User token accounts (in/out depend on swap direction)
-        AccountMeta::new(if swap_for_y { user_token_x } else { user_token_y }, false), // 3. user_token_in
-        AccountMeta::new(if swap_for_y { user_token_y } else { user_token_x }, false), // 4. user_token_out
-
+        AccountMeta::new(
+            if swap_for_y {
+                user_token_x
+            } else {
+                user_token_y
+            },
+            false,
+        ), // 3. user_token_in
+        AccountMeta::new(
+            if swap_for_y {
+                user_token_y
+            } else {
+                user_token_x
+            },
+            false,
+        ), // 4. user_token_out
         // Token mints (CRITICAL - these were missing!)
-        AccountMeta::new_readonly(token_x_mint, false),             // 5. token_x_mint
-        AccountMeta::new_readonly(token_y_mint, false),             // 6. token_y_mint
-
+        AccountMeta::new_readonly(token_x_mint, false), // 5. token_x_mint
+        AccountMeta::new_readonly(token_y_mint, false), // 6. token_y_mint
         // Oracle
-        AccountMeta::new(oracle, false),                            // 7. oracle
-
+        AccountMeta::new(oracle, false), // 7. oracle
         // Note: host_fee_in is optional, skip for now
 
         // Signer
-        AccountMeta::new_readonly(*user_wallet, true),              // 8. user (signer)
-
+        AccountMeta::new_readonly(*user_wallet, true), // 8. user (signer)
         // Token programs (CRITICAL - these were missing!)
-        AccountMeta::new_readonly(token_program_id(), false),       // 9. token_x_program
-        AccountMeta::new_readonly(token_program_id(), false),       // 10. token_y_program
+        AccountMeta::new_readonly(token_program_id(), false), // 9. token_x_program
+        AccountMeta::new_readonly(token_program_id(), false), // 10. token_y_program
     ];
 
     let instruction = Instruction {
@@ -185,43 +190,43 @@ pub async fn execute_meteora_swap(
         &user_keypair.pubkey(),
         slippage_tolerance,
         swap_for_y,
-    ).await?;
+    )
+    .await?;
 
     // Create transaction
-    let mut transaction = Transaction::new_with_payer(
-        &[swap_ix],
-        Some(&user_keypair.pubkey()),
-    );
+    let mut transaction = Transaction::new_with_payer(&[swap_ix], Some(&user_keypair.pubkey()));
 
     // Get recent blockhash (use cached if available, otherwise fetch)
     let recent_blockhash = match cached_blockhash {
-        Some(cache) => {
-            crate::cached_blockhash::get_blockhash(cache, &rpc_client).await
-                .map_err(|e| anyhow!("Failed to get blockhash: {}", e))?
-        }
-        None => {
-            rpc_client.get_latest_blockhash()
-                .map_err(|e| anyhow!("Failed to get blockhash: {}", e))?
-        }
+        Some(cache) => crate::cached_blockhash::get_blockhash(cache, &rpc_client)
+            .await
+            .map_err(|e| anyhow!("Failed to get blockhash: {}", e))?,
+        None => rpc_client
+            .get_latest_blockhash()
+            .map_err(|e| anyhow!("Failed to get blockhash: {}", e))?,
     };
 
     transaction.sign(&[user_keypair], recent_blockhash);
 
     // MANDATORY SIMULATION (Grok's safety recommendation)
     info!("🧪 Simulating transaction...");
-    let simulation_success = rpc_client.simulate_transaction(&transaction)
+    let simulation_success = rpc_client
+        .simulate_transaction(&transaction)
         .map_err(|e| anyhow!("Simulation failed: {}", e))?;
 
     if !simulation_success {
         warn!("❌ Simulation failed - transaction would revert on-chain");
-        return Err(anyhow!("Transaction would fail on-chain - simulation returned false"));
+        return Err(anyhow!(
+            "Transaction would fail on-chain - simulation returned false"
+        ));
     }
 
     info!("✅ Simulation passed");
 
     // Send transaction
     info!("📡 Sending transaction to blockchain...");
-    let signature = rpc_client.send_transaction(&transaction)
+    let signature = rpc_client
+        .send_transaction(&transaction)
         .map_err(|e| anyhow!("Failed to send transaction: {}", e))?;
 
     info!("🎉 Swap executed successfully!");

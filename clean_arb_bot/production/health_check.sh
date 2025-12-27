@@ -136,14 +136,14 @@ if [ ${#ISSUES[@]} -gt 0 ]; then
     done
     echo ""
     echo "Recommended actions:"
-    if [[ " ${ISSUES[@]} " =~ "Bot process down" ]]; then
+    if [[ " ${ISSUES[*]} " =~ "Bot process down" ]]; then
         echo "   → Restart bot: ./production/start_arb_bot.sh"
     fi
-    if [[ " ${ISSUES[@]} " =~ "ShredStream service down" ]]; then
+    if [[ " ${ISSUES[*]} " =~ "ShredStream service down" ]]; then
         echo "   → Restart ShredStream: cd /home/tom14cat14/Arb_Bot/shredstream_service && ~/.cargo/bin/cargo run --release"
     fi
-    if [[ " ${ISSUES[@]} " =~ "Killswitch active" ]]; then
-        echo "   → Clear killswitch: rm -f $KILLSWITCH_FILE"
+    if [[ " ${ISSUES[*]} " =~ "Killswitch active" ]]; then
+        echo "   → Clear killswitch: rm -f "$KILLSWITCH_FILE""
         echo "   → Restart bot: ./production/start_arb_bot.sh"
     fi
 fi

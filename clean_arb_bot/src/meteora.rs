@@ -4,16 +4,13 @@
 // Handles 90% of detected triangle arbitrage opportunities
 
 use anyhow::{Context, Result};
-use solana_sdk::{
-    instruction::Instruction,
-    pubkey::Pubkey,
-};
+use solana_sdk::{instruction::Instruction, pubkey::Pubkey};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use crate::types::SwapParams;
-use crate::rpc_client::SolanaRpcClient;
 use crate::pool_registry::PoolRegistry;
+use crate::rpc_client::SolanaRpcClient;
+use crate::types::SwapParams;
 
 /// Meteora DLMM swap instruction builder
 pub struct MeteoraSwapBuilder {
@@ -36,10 +33,7 @@ impl MeteoraSwapBuilder {
     pub const DAMM_V2_PROGRAM_ID: &'static str = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG";
 
     /// Create new Meteora swap builder
-    pub fn new(
-        rpc_client: Arc<SolanaRpcClient>,
-        pool_registry: Arc<PoolRegistry>,
-    ) -> Result<Self> {
+    pub fn new(rpc_client: Arc<SolanaRpcClient>, pool_registry: Arc<PoolRegistry>) -> Result<Self> {
         let program_id = Self::PROGRAM_ID
             .parse()
             .context("Failed to parse Meteora program ID")?;
@@ -71,18 +65,23 @@ impl MeteoraSwapBuilder {
         swap_params: &SwapParams,
         user_pubkey: &Pubkey,
     ) -> Result<Instruction> {
-        debug!("Building Meteora swap instruction for pool: {}", pool_short_id);
+        debug!(
+            "Building Meteora swap instruction for pool: {}",
+            pool_short_id
+        );
 
         // Step 1: Resolve pool address from short ID using 4-layer hybrid resolution
         // Try DLMM first (most common), then V1, then V2 (all variants may exist)
-        let pool_address = match self.pool_registry
+        let pool_address = match self
+            .pool_registry
             .resolve_pool_address(pool_short_id, &crate::types::DexType::MeteoraDlmm)
             .await
         {
             Ok(addr) => addr,
             Err(_) => {
                 // Try V1 if DLMM fails
-                match self.pool_registry
+                match self
+                    .pool_registry
                     .resolve_pool_address(pool_short_id, &crate::types::DexType::MeteoraDammV1)
                     .await
                 {
@@ -90,15 +89,24 @@ impl MeteoraSwapBuilder {
                     Err(_) => {
                         // Try V2 if V1 also fails
                         self.pool_registry
-                            .resolve_pool_address(pool_short_id, &crate::types::DexType::MeteoraDammV2)
+                            .resolve_pool_address(
+                                pool_short_id,
+                                &crate::types::DexType::MeteoraDammV2,
+                            )
                             .await
-                            .context(format!("Failed to resolve pool address for {} (tried DLMM, V1, V2)", pool_short_id))?
+                            .context(format!(
+                                "Failed to resolve pool address for {} (tried DLMM, V1, V2)",
+                                pool_short_id
+                            ))?
                     }
                 }
             }
         };
 
-        debug!("✅ Resolved pool {} to address: {}", pool_short_id, pool_address);
+        debug!(
+            "✅ Resolved pool {} to address: {}",
+            pool_short_id, pool_address
+        );
 
         // GROK GHOST POOL SOLUTION - STEP 3: Early validation check (should be cached from arbitrage engine)
         // This is a safety fallback - normally pools are validated before execution
@@ -106,21 +114,27 @@ impl MeteoraSwapBuilder {
         // MARKET CHAOS MODE - Skip ghost pool validation for speed
         let skip_ghost_pool_check = std::env::var("SKIP_GHOST_POOL_CHECK")
             .unwrap_or_else(|_| "false".to_string())
-            .to_lowercase() == "true";
+            .to_lowercase()
+            == "true";
 
-        if !skip_ghost_pool_check {
+        if !skip_ghost_pool_check
+            && self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true)
+        {
+            // Rare case: validate on-demand if not cached
+            warn!(
+                "⚠️ Pool {} not in cache, validating on-demand",
+                pool_short_id
+            );
+            self.pool_registry
+                .validate_pools_batch(&[pool_short_id.to_string()])
+                .await?;
+
+            // Double-check after validation
             if self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true) {
-                // Rare case: validate on-demand if not cached
-                warn!("⚠️ Pool {} not in cache, validating on-demand", pool_short_id);
-                self.pool_registry.validate_pools_batch(&[pool_short_id.to_string()]).await?;
-
-                // Double-check after validation
-                if self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true) {
-                    return Err(anyhow::anyhow!(
-                        "⚠️ Ghost pool detected: {} (failed validation)",
-                        pool_short_id
-                    ));
-                }
+                return Err(anyhow::anyhow!(
+                    "⚠️ Ghost pool detected: {} (failed validation)",
+                    pool_short_id
+                ));
             }
         }
 
@@ -129,14 +143,22 @@ impl MeteoraSwapBuilder {
         // CRITICAL: Validate this is actually a Meteora pool (DLMM, DAMM V1, or DAMM V2)
         // SKIP if SKIP_GHOST_POOL_CHECK is enabled (market chaos mode)
         if !skip_ghost_pool_check {
-            let account_owner = self.rpc_client.get_account_owner(&pool_address)
-                .context(format!("Failed to fetch account owner for pool {}", pool_address))?;
+            let account_owner =
+                self.rpc_client
+                    .get_account_owner(&pool_address)
+                    .context(format!(
+                        "Failed to fetch account owner for pool {}",
+                        pool_address
+                    ))?;
 
             let damm_v1_program_id: Pubkey = Self::DAMM_V1_PROGRAM_ID.parse().unwrap();
             let damm_v2_program_id: Pubkey = Self::DAMM_V2_PROGRAM_ID.parse().unwrap();
 
             // Accept DLMM, DAMM V1, and DAMM V2 program IDs
-            if account_owner != self.program_id && account_owner != damm_v1_program_id && account_owner != damm_v2_program_id {
+            if account_owner != self.program_id
+                && account_owner != damm_v1_program_id
+                && account_owner != damm_v2_program_id
+            {
                 return Err(anyhow::anyhow!(
                     "Pool {} not owned by Meteora DLMM, DAMM V1, or DAMM V2. Owner: {}, Expected: {} or {} or {}",
                     pool_address, account_owner, self.program_id, damm_v1_program_id, damm_v2_program_id
@@ -150,21 +172,25 @@ impl MeteoraSwapBuilder {
             } else {
                 "DAMM V2"
             };
-            debug!("✅ Validated Meteora {} pool ownership: {}", pool_type, account_owner);
+            debug!(
+                "✅ Validated Meteora {} pool ownership: {}",
+                pool_type, account_owner
+            );
         } else {
             debug!("⏭️ Skipping Meteora ownership validation (SKIP_GHOST_POOL_CHECK=true)");
         }
 
         // Get pool info for token mints and reserves
-        let pool_info = self.pool_registry
-            .get_pool(pool_short_id)
-            .ok_or_else(|| anyhow::anyhow!(
+        let pool_info = self.pool_registry.get_pool(pool_short_id).ok_or_else(|| {
+            anyhow::anyhow!(
                 "Pool {} resolved but info not cached. This shouldn't happen.",
                 pool_short_id
-            ))?;
+            )
+        })?;
 
         // Step 2: Fetch pool state from blockchain
-        let pool_state = self.fetch_pool_state(&pool_address)
+        let pool_state = self
+            .fetch_pool_state(&pool_address)
             .context("Failed to fetch pool state")?;
 
         debug!("✅ Got pool state ({} bytes)", pool_state.len());
@@ -200,8 +226,18 @@ impl MeteoraSwapBuilder {
         };
 
         if !is_native_sol_in && !self.rpc_client.account_exists(&user_token_in)? {
-            info!("🔧 Creating associated token account for input token: {}", user_token_in);
-            info!("   Token mint: {}", if swap_params.swap_a_to_b { &pool_info.token_a_mint } else { &pool_info.token_b_mint });
+            info!(
+                "🔧 Creating associated token account for input token: {}",
+                user_token_in
+            );
+            info!(
+                "   Token mint: {}",
+                if swap_params.swap_a_to_b {
+                    &pool_info.token_a_mint
+                } else {
+                    &pool_info.token_b_mint
+                }
+            );
 
             let token_mint = if swap_params.swap_a_to_b {
                 &pool_info.token_a_mint
@@ -210,12 +246,13 @@ impl MeteoraSwapBuilder {
             };
 
             // Create ATA instruction
-            let create_ata_ix = spl_associated_token_account::instruction::create_associated_token_account(
-                user_pubkey,      // Payer
-                user_pubkey,      // Owner of new account
-                token_mint,       // Token mint
-                &spl_token::id(), // Token program ID
-            );
+            let create_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account(
+                    user_pubkey,      // Payer
+                    user_pubkey,      // Owner of new account
+                    token_mint,       // Token mint
+                    &spl_token::id(), // Token program ID
+                );
 
             setup_instructions.push(create_ata_ix);
             info!("✅ ATA creation instruction added - account will be created in transaction");
@@ -231,8 +268,18 @@ impl MeteoraSwapBuilder {
         };
 
         if !is_native_sol_out && !self.rpc_client.account_exists(&user_token_out)? {
-            info!("🔧 Creating associated token account for output token: {}", user_token_out);
-            info!("   Token mint: {}", if swap_params.swap_a_to_b { &pool_info.token_b_mint } else { &pool_info.token_a_mint });
+            info!(
+                "🔧 Creating associated token account for output token: {}",
+                user_token_out
+            );
+            info!(
+                "   Token mint: {}",
+                if swap_params.swap_a_to_b {
+                    &pool_info.token_b_mint
+                } else {
+                    &pool_info.token_a_mint
+                }
+            );
 
             let token_mint = if swap_params.swap_a_to_b {
                 &pool_info.token_b_mint
@@ -241,12 +288,13 @@ impl MeteoraSwapBuilder {
             };
 
             // Create ATA instruction
-            let create_ata_ix = spl_associated_token_account::instruction::create_associated_token_account(
-                user_pubkey,      // Payer
-                user_pubkey,      // Owner of new account
-                token_mint,       // Token mint
-                &spl_token::id(), // Token program ID
-            );
+            let create_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account(
+                    user_pubkey,      // Payer
+                    user_pubkey,      // Owner of new account
+                    token_mint,       // Token mint
+                    &spl_token::id(), // Token program ID
+                );
 
             setup_instructions.push(create_ata_ix);
             info!("✅ ATA creation instruction added for output - account will be created in transaction");
@@ -265,8 +313,8 @@ impl MeteoraSwapBuilder {
             &user_token_out,
             &pool_info.reserve_a,
             &pool_info.reserve_b,
-            &pool_info.token_a_mint,  // NEW: token_x_mint
-            &pool_info.token_b_mint,  // NEW: token_y_mint
+            &pool_info.token_a_mint, // NEW: token_x_mint
+            &pool_info.token_b_mint, // NEW: token_y_mint
             swap_params,
         )?;
 
@@ -275,19 +323,36 @@ impl MeteoraSwapBuilder {
         all_instructions.push(instruction);
 
         if all_instructions.len() > 1 {
-            info!("✅ Built {} instructions ({} setup + 1 swap)", all_instructions.len(), all_instructions.len() - 1);
+            info!(
+                "✅ Built {} instructions ({} setup + 1 swap)",
+                all_instructions.len(),
+                all_instructions.len() - 1
+            );
         } else {
             info!("✅ Built Meteora swap instruction");
         }
         info!("   Pool: {}", pool_address);
         info!("   Amount in: {} lamports", swap_params.amount_in);
-        info!("   Min amount out: {} lamports", swap_params.minimum_amount_out);
-        info!("   Direction: {}", if swap_params.swap_a_to_b { "A→B" } else { "B→A" });
+        info!(
+            "   Min amount out: {} lamports",
+            swap_params.minimum_amount_out
+        );
+        info!(
+            "   Direction: {}",
+            if swap_params.swap_a_to_b {
+                "A→B"
+            } else {
+                "B→A"
+            }
+        );
 
         // CRITICAL FIX: For now, we need to return a single instruction
         // But we should log a warning if we're dropping ATA creation instructions
         if all_instructions.len() > 1 {
-            warn!("⚠️ CRITICAL: Dropping {} ATA creation instructions!", all_instructions.len() - 1);
+            warn!(
+                "⚠️ CRITICAL: Dropping {} ATA creation instructions!",
+                all_instructions.len() - 1
+            );
             warn!("   This will cause transaction failures if ATAs don't exist");
             warn!("   TODO: Update function signature to return Vec<Instruction>");
         }
@@ -319,8 +384,8 @@ impl MeteoraSwapBuilder {
         user_token_out: &Pubkey,
         reserve_in: &Pubkey,
         reserve_out: &Pubkey,
-        token_mint_a: &Pubkey,  // NEW: Token X mint
-        token_mint_b: &Pubkey,  // NEW: Token Y mint
+        token_mint_a: &Pubkey, // NEW: Token X mint
+        token_mint_b: &Pubkey, // NEW: Token Y mint
         swap_params: &SwapParams,
     ) -> Result<Instruction> {
         // Meteora DLMM swap instruction structure
@@ -348,10 +413,8 @@ impl MeteoraSwapBuilder {
         };
 
         // Derive oracle PDA (standard derivation for Meteora)
-        let (oracle, _) = Pubkey::find_program_address(
-            &[b"oracle", pool.as_ref()],
-            &self.program_id,
-        );
+        let (oracle, _) =
+            Pubkey::find_program_address(&[b"oracle", pool.as_ref()], &self.program_id);
 
         // NEW: Event authority constant from Meteora
         let event_authority: Pubkey = "6XzaKuAwqP7Nn37vwRdUqpuzNXknkBqjWq3c3h8qQXhE"
@@ -359,21 +422,21 @@ impl MeteoraSwapBuilder {
             .expect("Valid event authority pubkey");
 
         let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new(*pool, false),                      // 0. lb_pair
+            solana_sdk::instruction::AccountMeta::new(*pool, false), // 0. lb_pair
             // Note: bin_array_bitmap_extension is optional, using None (skipping)
-            solana_sdk::instruction::AccountMeta::new(*reserve_x, false),                 // 1. reserve_x
-            solana_sdk::instruction::AccountMeta::new(*reserve_y, false),                 // 2. reserve_y
-            solana_sdk::instruction::AccountMeta::new(*user_token_in, false),             // 3. user_token_in
-            solana_sdk::instruction::AccountMeta::new(*user_token_out, false),            // 4. user_token_out
-            solana_sdk::instruction::AccountMeta::new_readonly(*token_mint_a, false),     // 5. token_x_mint
-            solana_sdk::instruction::AccountMeta::new_readonly(*token_mint_b, false),     // 6. token_y_mint
-            solana_sdk::instruction::AccountMeta::new(oracle, false),                     // 7. oracle
+            solana_sdk::instruction::AccountMeta::new(*reserve_x, false), // 1. reserve_x
+            solana_sdk::instruction::AccountMeta::new(*reserve_y, false), // 2. reserve_y
+            solana_sdk::instruction::AccountMeta::new(*user_token_in, false), // 3. user_token_in
+            solana_sdk::instruction::AccountMeta::new(*user_token_out, false), // 4. user_token_out
+            solana_sdk::instruction::AccountMeta::new_readonly(*token_mint_a, false), // 5. token_x_mint
+            solana_sdk::instruction::AccountMeta::new_readonly(*token_mint_b, false), // 6. token_y_mint
+            solana_sdk::instruction::AccountMeta::new(oracle, false),                 // 7. oracle
             // Note: host_fee_in is optional, using None (skipping)
-            solana_sdk::instruction::AccountMeta::new_readonly(*user, true),              // 8. user (signer)
-            solana_sdk::instruction::AccountMeta::new_readonly(spl_token::id(), false),   // 9. token_x_program
-            solana_sdk::instruction::AccountMeta::new_readonly(spl_token::id(), false),   // 10. token_y_program
-            solana_sdk::instruction::AccountMeta::new_readonly(event_authority, false),   // 11. event_authority (CRITICAL!)
-            solana_sdk::instruction::AccountMeta::new_readonly(self.program_id, false),   // 12. program (CRITICAL!)
+            solana_sdk::instruction::AccountMeta::new_readonly(*user, true), // 8. user (signer)
+            solana_sdk::instruction::AccountMeta::new_readonly(spl_token::id(), false), // 9. token_x_program
+            solana_sdk::instruction::AccountMeta::new_readonly(spl_token::id(), false), // 10. token_y_program
+            solana_sdk::instruction::AccountMeta::new_readonly(event_authority, false), // 11. event_authority (CRITICAL!)
+            solana_sdk::instruction::AccountMeta::new_readonly(self.program_id, false), // 12. program (CRITICAL!)
         ];
 
         // Instruction data format for Meteora DLMM swap
@@ -398,7 +461,10 @@ impl MeteoraSwapBuilder {
             data,
         };
 
-        debug!("Built Meteora instruction with {} accounts", instruction.accounts.len());
+        debug!(
+            "Built Meteora instruction with {} accounts",
+            instruction.accounts.len()
+        );
 
         Ok(instruction)
     }
@@ -415,7 +481,8 @@ impl MeteoraSwapBuilder {
         debug!("Estimating swap output for pool: {}", pool_short_id);
 
         // Get pool info
-        let pool_info = self.pool_registry
+        let pool_info = self
+            .pool_registry
             .get_pool(pool_short_id)
             .ok_or_else(|| anyhow::anyhow!("Pool {} not found", pool_short_id))?;
 

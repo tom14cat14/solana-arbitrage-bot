@@ -5,9 +5,9 @@
 //
 // Grok Cycle 3 Critical Fix: Atomic position tracking with lock-free design
 
+use anyhow::{anyhow, Result};
 use std::sync::atomic::{AtomicU64, Ordering};
-use anyhow::{Result, anyhow};
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
 /// Lock-free position tracker using atomic operations
 ///
@@ -47,9 +47,18 @@ impl PositionTracker {
         let max_position_lamports = (max_position_sol * 1_000_000_000.0) as u64;
 
         info!("✅ Position tracker initialized (DYNAMIC SIZING):");
-        info!("   Initial capital: {:.4} SOL ({} lamports)", capital_sol, total_capital_lamports);
-        info!("   Max position: {:.4} SOL ({} lamports)", max_position_sol, max_position_lamports);
-        info!("   Fee reserve: {:.4} SOL ({} lamports) - PROTECTED", FEE_RESERVE_SOL, fee_reserve_lamports);
+        info!(
+            "   Initial capital: {:.4} SOL ({} lamports)",
+            capital_sol, total_capital_lamports
+        );
+        info!(
+            "   Max position: {:.4} SOL ({} lamports)",
+            max_position_sol, max_position_lamports
+        );
+        info!(
+            "   Fee reserve: {:.4} SOL ({} lamports) - PROTECTED",
+            FEE_RESERVE_SOL, fee_reserve_lamports
+        );
         info!("   Tradeable balance will update based on actual wallet balance");
 
         Self {
@@ -70,8 +79,10 @@ impl PositionTracker {
     pub fn can_open_position(&self, size_lamports: u64) -> bool {
         // Check against max position size limit
         if size_lamports > self.max_position_lamports {
-            debug!("Position size {} exceeds max {} lamports",
-                size_lamports, self.max_position_lamports);
+            debug!(
+                "Position size {} exceeds max {} lamports",
+                size_lamports, self.max_position_lamports
+            );
             return false;
         }
 
@@ -102,7 +113,9 @@ impl PositionTracker {
         let tradeable = wallet_balance_lamports.saturating_sub(self.fee_reserve_lamports);
 
         // Update total capital atomically
-        let old_capital = self.total_capital_lamports.swap(tradeable, Ordering::Release);
+        let old_capital = self
+            .total_capital_lamports
+            .swap(tradeable, Ordering::Release);
 
         if tradeable != old_capital {
             let old_sol = old_capital as f64 / 1_000_000_000.0;
@@ -141,9 +154,15 @@ impl PositionTracker {
             .min(self.max_position_lamports);
 
         debug!("📊 Dynamic position sizing:");
-        debug!("   Opportunity size: {:.6} SOL", opportunity_size_lamports as f64 / 1e9);
+        debug!(
+            "   Opportunity size: {:.6} SOL",
+            opportunity_size_lamports as f64 / 1e9
+        );
         debug!("   Available capital: {:.6} SOL", available as f64 / 1e9);
-        debug!("   Max position: {:.6} SOL", self.max_position_lamports as f64 / 1e9);
+        debug!(
+            "   Max position: {:.6} SOL",
+            self.max_position_lamports as f64 / 1e9
+        );
         debug!("   Position size: {:.6} SOL", position_size as f64 / 1e9);
 
         position_size
@@ -191,8 +210,8 @@ impl PositionTracker {
             match self.in_flight_lamports.compare_exchange(
                 current,
                 new_total,
-                Ordering::Release,  // Success: ensure write is visible to other threads
-                Ordering::Relaxed,  // Failure: retry with new value
+                Ordering::Release, // Success: ensure write is visible to other threads
+                Ordering::Relaxed, // Failure: retry with new value
             ) {
                 Ok(_) => {
                     debug!("✅ Reserved {} lamports ({:.4} SOL). In-flight: {} lamports ({:.4} SOL / {:.4} SOL total)",
@@ -221,7 +240,9 @@ impl PositionTracker {
     /// SAFETY: This uses fetch_sub which can underflow if called incorrectly.
     /// Always ensure reserve_capital was called before release_capital.
     pub fn release_capital(&self, amount_lamports: u64) {
-        let previous = self.in_flight_lamports.fetch_sub(amount_lamports, Ordering::Release);
+        let previous = self
+            .in_flight_lamports
+            .fetch_sub(amount_lamports, Ordering::Release);
 
         debug!("✅ Released {} lamports ({:.4} SOL). In-flight: {} lamports ({:.4} SOL / {:.4} SOL total)",
             amount_lamports,
@@ -234,8 +255,10 @@ impl PositionTracker {
         // SAFETY CHECK: Detect potential underflow (should never happen if used correctly)
         if previous < amount_lamports {
             warn!("⚠️ CRITICAL: Position tracker underflow detected!");
-            warn!("   Attempted to release {} lamports, but only {} were in-flight",
-                amount_lamports, previous);
+            warn!(
+                "   Attempted to release {} lamports, but only {} were in-flight",
+                amount_lamports, previous
+            );
             warn!("   This indicates a logic bug - investigate immediately!");
         }
     }
@@ -262,12 +285,16 @@ impl PositionTracker {
     /// This should NEVER be needed in normal operation
     pub fn emergency_reset(&self) {
         warn!("🚨 EMERGENCY: Force resetting all in-flight capital to zero");
-        warn!("   Previous in-flight: {} lamports", self.in_flight_lamports.load(Ordering::Relaxed));
+        warn!(
+            "   Previous in-flight: {} lamports",
+            self.in_flight_lamports.load(Ordering::Relaxed)
+        );
 
         self.in_flight_lamports.store(0, Ordering::Release);
 
         let total_capital = self.total_capital_lamports.load(Ordering::Relaxed);
-        warn!("   All capital now available: {} lamports ({:.4} SOL)",
+        warn!(
+            "   All capital now available: {} lamports ({:.4} SOL)",
             total_capital,
             total_capital as f64 / 1_000_000_000.0
         );
@@ -342,7 +369,10 @@ mod tests {
         // Try to reserve more - should fail (only 1 SOL total)
         let result = tracker.reserve_capital(100_000_000); // 0.1 SOL
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Insufficient capital"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Insufficient capital"));
     }
 
     #[test]

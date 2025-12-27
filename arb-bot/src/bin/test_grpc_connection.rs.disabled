@@ -1,0 +1,49 @@
+use anyhow::Result;
+use tracing::{info, error};
+use arb_bot::shredstream_client::ShredStreamPriceFeed;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Initialize logging
+    tracing_subscriber::fmt()
+        .with_env_filter("info")
+        .init();
+
+    info!("🚀 Testing ERPC ShredStream Connection");
+    info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    // ERPC ShredStream configuration
+    let shred_endpoint = std::env::var("SHREDS_ENDPOINT")
+        .unwrap_or_else(|_| "https://shreds-ny6-1.erpc.global".to_string());
+
+    info!("📡 Configuration:");
+    info!("  • ShredStream Endpoint: {}", shred_endpoint);
+    info!("");
+
+    // Create price feed
+    let mut price_feed = ShredStreamPriceFeed::new(shred_endpoint);
+
+    info!("🔌 Attempting to connect to ERPC ShredStream...");
+    info!("");
+
+    // Start monitoring (this will run until interrupted)
+    match price_feed.start_real_price_monitoring().await {
+        Ok(_) => {
+            info!("✅ ShredStream monitoring completed successfully");
+        }
+        Err(e) => {
+            error!("❌ ShredStream monitoring failed: {}", e);
+            error!("   Error details: {:?}", e);
+            return Err(e);
+        }
+    }
+
+    info!("");
+    info!("📊 Final Statistics:");
+    let stats = price_feed.get_stats();
+    for (key, value) in stats {
+        info!("  • {}: {}", key, value);
+    }
+
+    Ok(())
+}

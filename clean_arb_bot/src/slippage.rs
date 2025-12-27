@@ -2,8 +2,8 @@
 //! Implements dynamic slippage calculations based on historical volatility
 //! Grok recommendation for "bulletproof" live trading
 
-use rust_decimal::Decimal;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
+use rust_decimal::Decimal;
 
 /// Calculate expected slippage based on market price and volatility
 ///
@@ -29,8 +29,7 @@ pub fn calculate_slippage(
     volatility: f64,
 ) -> Decimal {
     // Grok's formula: adjust for volatility percentage
-    let adjustment = Decimal::from_f64(volatility * 0.01)
-        .unwrap_or(Decimal::ZERO);
+    let adjustment = Decimal::from_f64(volatility * 0.01).unwrap_or(Decimal::ZERO);
 
     // Calculate price difference
     let price_diff = if expected_price > market_price {
@@ -58,12 +57,12 @@ pub fn calculate_max_slippage(
     max_slippage_pct: f64,
 ) -> Decimal {
     // Base slippage from percentage
-    let base_slippage = expected_price * Decimal::from_f64(max_slippage_pct / 100.0)
-        .unwrap_or(Decimal::ZERO);
+    let base_slippage =
+        expected_price * Decimal::from_f64(max_slippage_pct / 100.0).unwrap_or(Decimal::ZERO);
 
     // Add volatility adjustment
-    let volatility_adjustment = expected_price * Decimal::from_f64(volatility / 100.0)
-        .unwrap_or(Decimal::ZERO);
+    let volatility_adjustment =
+        expected_price * Decimal::from_f64(volatility / 100.0).unwrap_or(Decimal::ZERO);
 
     base_slippage + volatility_adjustment
 }
@@ -108,10 +107,7 @@ pub fn is_slippage_acceptable(
 ///
 /// # Returns
 /// * Slippage as percentage (e.g., 1.5 for 1.5% slippage)
-pub fn calculate_slippage_percentage(
-    expected_price: Decimal,
-    actual_price: Decimal,
-) -> f64 {
+pub fn calculate_slippage_percentage(expected_price: Decimal, actual_price: Decimal) -> f64 {
     let price_diff = if expected_price > actual_price {
         expected_price - actual_price
     } else {
@@ -146,8 +142,8 @@ mod tests {
     #[test]
     fn test_is_slippage_acceptable() {
         let expected = dec!(1.0);
-        let actual_good = dec!(1.01);   // 1% slippage
-        let actual_bad = dec!(1.10);    // 10% slippage
+        let actual_good = dec!(1.01); // 1% slippage
+        let actual_bad = dec!(1.10); // 10% slippage
 
         // With 5% volatility and 2% max slippage = 7% total allowed
         assert!(is_slippage_acceptable(expected, actual_good, 5.0, 2.0));

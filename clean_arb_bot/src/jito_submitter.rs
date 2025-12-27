@@ -9,34 +9,34 @@
 // - Exponential backoff on 429 errors
 // - Support for batching up to 5 transactions per bundle
 
+use anyhow::Result;
+use solana_sdk::transaction::Transaction;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::{self, Duration, Instant};
-use anyhow::Result;
-use tracing::{info, warn, error, debug};
-use solana_sdk::transaction::Transaction;
+use tracing::{debug, error, info, warn};
 
-use crate::jito_grpc_client::JitoGrpcClient;
 use crate::jito_bundle_client::JitoBundleClient;
+use crate::jito_grpc_client::JitoGrpcClient;
 
 /// Bundle submission request
 #[derive(Debug, Clone)]
 pub struct BundleRequest {
-    pub transactions: Vec<Transaction>,  // Transactions with tips ALREADY included
-    pub description: String,  // For logging (e.g., "SOL→TokenA→SOL arbitrage")
+    pub transactions: Vec<Transaction>, // Transactions with tips ALREADY included
+    pub description: String,            // For logging (e.g., "SOL→TokenA→SOL arbitrage")
     pub expected_profit_sol: f64,
     pub attempt: u32,
-    pub queued_at: Instant,  // Timestamp when bundle was queued
+    pub queued_at: Instant, // Timestamp when bundle was queued
 }
 
 /// Queue-based JITO bundle submitter with optional gRPC + HTTP fallback
 ///
 /// Ensures exactly 1 bundle per 1.1 seconds to avoid 429 errors
 pub struct JitoSubmitter {
-    queue_tx: mpsc::Sender<BundleRequest>,  // CRITICAL FIX: Bounded channel (was unbounded)
+    queue_tx: mpsc::Sender<BundleRequest>, // CRITICAL FIX: Bounded channel (was unbounded)
     stats: Arc<Mutex<SubmitterStats>>,
-    grpc_client: Option<Arc<Mutex<JitoGrpcClient>>>,  // Optional: gRPC (75ms latency)
-    http_client: Arc<JitoBundleClient>,                // Always available: HTTP (150ms latency)
+    grpc_client: Option<Arc<Mutex<JitoGrpcClient>>>, // Optional: gRPC (75ms latency)
+    http_client: Arc<JitoBundleClient>,              // Always available: HTTP (150ms latency)
 }
 
 #[derive(Debug, Default)]
@@ -46,7 +46,7 @@ pub struct SubmitterStats {
     pub total_failed: u64,
     pub rate_limited_429: u64,
     pub queue_depth: usize,
-    pub queue_full_drops: u64,  // Track dropped bundles due to full queue
+    pub queue_full_drops: u64, // Track dropped bundles due to full queue
 }
 
 impl JitoSubmitter {
@@ -56,7 +56,7 @@ impl JitoSubmitter {
         grpc_client: Option<Arc<Mutex<JitoGrpcClient>>>,
         http_client: Arc<JitoBundleClient>,
     ) -> Self {
-        let (queue_tx, mut queue_rx) = mpsc::channel::<BundleRequest>(100);  // Bounded capacity
+        let (queue_tx, mut queue_rx) = mpsc::channel::<BundleRequest>(100); // Bounded capacity
         let stats = Arc::new(Mutex::new(SubmitterStats::default()));
         let stats_clone = stats.clone();
         let grpc_clone = grpc_client.clone();
@@ -77,18 +77,24 @@ impl JitoSubmitter {
                 let elapsed = last_submit.elapsed();
                 if elapsed < Duration::from_millis(1500) {
                     let wait_time = Duration::from_millis(1500) - elapsed;
-                    debug!("⏱️ Rate limiting: waiting {:?} before next submission", wait_time);
+                    debug!(
+                        "⏱️ Rate limiting: waiting {:?} before next submission",
+                        wait_time
+                    );
 
                     // Sleep for most of the wait time
                     time::sleep(wait_time).await;
 
                     // NOW clear ALL stale bundles from queue
                     let mut drained_count = 0;
-                    while let Ok(_) = queue_rx.try_recv() {
+                    while queue_rx.try_recv().is_ok() {
                         drained_count += 1;
                     }
                     if drained_count > 0 {
-                        debug!("🧹 Discarded {} stale bundles - waiting for FRESH", drained_count);
+                        debug!(
+                            "🧹 Discarded {} stale bundles - waiting for FRESH",
+                            drained_count
+                        );
                         let mut s = stats_clone.lock().await;
                         s.total_failed += drained_count as u64;
                     }
@@ -99,7 +105,8 @@ impl JitoSubmitter {
                 // Solution: Wait up to 100ms for a NEW bundle. If none arrives, skip this cycle.
                 debug!("🎯 Rate limit open - waiting up to 100ms for FRESH opportunity...");
 
-                let request = match time::timeout(Duration::from_millis(100), queue_rx.recv()).await {
+                let request = match time::timeout(Duration::from_millis(100), queue_rx.recv()).await
+                {
                     Ok(Some(req)) => {
                         let age_ms = req.queued_at.elapsed().as_millis();
                         debug!("✅ Fresh opportunity arrived (age: {}ms)", age_ms);
@@ -118,7 +125,8 @@ impl JitoSubmitter {
 
                 // We have a fresh opportunity! Verify freshness one more time
                 let age_ms = request.queued_at.elapsed().as_millis();
-                if age_ms > 150 {  // Should be impossible, but safety check
+                if age_ms > 150 {
+                    // Should be impossible, but safety check
                     warn!("⏰ Unexpected: bundle age {}ms > 150ms - dropping", age_ms);
                     let mut s = stats_clone.lock().await;
                     s.total_failed += 1;
@@ -137,8 +145,10 @@ impl JitoSubmitter {
                     let mut grpc = grpc_mutex.lock().await;
                     match tokio::time::timeout(
                         Duration::from_secs(5),
-                        grpc.send_bundle(request.transactions.clone())
-                    ).await {
+                        grpc.send_bundle(request.transactions.clone()),
+                    )
+                    .await
+                    {
                         Ok(Ok(uuid)) => {
                             info!("🚀 JITO bundle submitted via gRPC (FAST!): {}", uuid);
                             Ok(uuid)
@@ -151,14 +161,22 @@ impl JitoSubmitter {
                             // Fallback to HTTP
                             match tokio::time::timeout(
                                 Duration::from_secs(10),
-                                http_clone.submit_bundle_safe(request.transactions.clone())
-                            ).await {
+                                http_clone.submit_bundle_safe(request.transactions.clone()),
+                            )
+                            .await
+                            {
                                 Ok(Ok(uuid)) => {
                                     info!("📤 JITO bundle submitted via HTTP (fallback): {}", uuid);
                                     Ok(uuid)
                                 }
-                                Ok(Err(e2)) => Err(anyhow::anyhow!("Both gRPC and HTTP failed: gRPC={}, HTTP={}", e, e2)),
-                                Err(_) => Err(anyhow::anyhow!("HTTP fallback timeout after gRPC failure")),
+                                Ok(Err(e2)) => Err(anyhow::anyhow!(
+                                    "Both gRPC and HTTP failed: gRPC={}, HTTP={}",
+                                    e,
+                                    e2
+                                )),
+                                Err(_) => {
+                                    Err(anyhow::anyhow!("HTTP fallback timeout after gRPC failure"))
+                                }
                             }
                         }
                         Err(_) => {
@@ -168,8 +186,10 @@ impl JitoSubmitter {
                             // Fallback to HTTP
                             match tokio::time::timeout(
                                 Duration::from_secs(10),
-                                http_clone.submit_bundle_safe(request.transactions.clone())
-                            ).await {
+                                http_clone.submit_bundle_safe(request.transactions.clone()),
+                            )
+                            .await
+                            {
                                 Ok(Ok(uuid)) => {
                                     info!("📤 JITO bundle submitted via HTTP (fallback): {}", uuid);
                                     Ok(uuid)
@@ -183,8 +203,10 @@ impl JitoSubmitter {
                     // No gRPC - use HTTP only
                     match tokio::time::timeout(
                         Duration::from_secs(10),
-                        http_clone.submit_bundle_safe(request.transactions.clone())
-                    ).await {
+                        http_clone.submit_bundle_safe(request.transactions.clone()),
+                    )
+                    .await
+                    {
                         Ok(Ok(uuid)) => {
                             info!("📤 JITO bundle submitted via HTTP: {}", uuid);
                             Ok(uuid)
@@ -205,8 +227,10 @@ impl JitoSubmitter {
                         // Check if bundle actually landed on-chain
                         match tokio::time::timeout(
                             Duration::from_secs(10),
-                            check_bundle_status(&http_clone, &bundle_id)
-                        ).await {
+                            check_bundle_status(&http_clone, &bundle_id),
+                        )
+                        .await
+                        {
                             Ok(Ok(true)) => {
                                 info!("✅ Bundle landed successfully!");
                                 let mut s = stats_clone.lock().await;
@@ -273,7 +297,7 @@ impl JitoSubmitter {
     /// Returns immediately, bundle will be submitted at next available slot
     pub async fn submit(
         &self,
-        transactions: Vec<Transaction>,  // Must have tips INSIDE
+        transactions: Vec<Transaction>, // Must have tips INSIDE
         description: String,
         expected_profit_sol: f64,
     ) -> Result<()> {
@@ -282,7 +306,7 @@ impl JitoSubmitter {
             description: description.clone(),
             expected_profit_sol,
             attempt: 0,
-            queued_at: Instant::now(),  // Timestamp for stale detection
+            queued_at: Instant::now(), // Timestamp for stale detection
         };
 
         // Update stats

@@ -1,17 +1,14 @@
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
-use std::sync::{Arc, Mutex};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use solana_sdk::{
-    transaction::Transaction,
-    signature::Signer,
-    pubkey::Pubkey,
-    compute_budget::ComputeBudgetInstruction,
-    system_instruction,
+    compute_budget::ComputeBudgetInstruction, pubkey::Pubkey, signature::Signer,
+    system_instruction, transaction::Transaction,
 };
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::time::timeout;
-use tracing::{info, warn, error, debug};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Token bucket rate limiter for JITO bundle submissions
@@ -93,7 +90,7 @@ pub struct BundleSubmissionRequest {
     pub jsonrpc: String,
     pub id: u64,
     pub method: String,
-    pub params: Vec<Vec<String>>,  // JITO expects params: [[transactions]]
+    pub params: Vec<Vec<String>>, // JITO expects params: [[transactions]]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,16 +125,16 @@ pub struct BundleTransaction {
 impl JitoBundleClient {
     /// Create new Jito bundle client with secure keypair reference and multiple endpoints
     pub fn new_with_keypair_ref(
-        _block_engine_url: String,  // Deprecated - using multiple endpoints
-        _relayer_url: String,  // Deprecated - using multiple endpoints
+        _block_engine_url: String, // Deprecated - using multiple endpoints
+        _relayer_url: String,      // Deprecated - using multiple endpoints
         auth_keypair: Arc<solana_sdk::signature::Keypair>,
     ) -> Self {
         // Multiple JITO endpoints for rotation (Grok recommendation)
         let endpoints = vec![
-            "https://mainnet.block-engine.jito.wtf".to_string(),  // US (primary)
-            "https://amsterdam.mainnet.block-engine.jito.wtf".to_string(),  // EU
-            "https://frankfurt.mainnet.block-engine.jito.wtf".to_string(),  // EU
-            "https://tokyo.mainnet.block-engine.jito.wtf".to_string(),  // Asia
+            "https://mainnet.block-engine.jito.wtf".to_string(), // US (primary)
+            "https://amsterdam.mainnet.block-engine.jito.wtf".to_string(), // EU
+            "https://frankfurt.mainnet.block-engine.jito.wtf".to_string(), // EU
+            "https://tokyo.mainnet.block-engine.jito.wtf".to_string(), // Asia
         ];
 
         info!("🌐 JITO endpoints configured:");
@@ -147,14 +144,30 @@ impl JitoBundleClient {
 
         // Official Jito tip accounts for mainnet-beta
         let tip_accounts = vec![
-            "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5".parse().unwrap(),
-            "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe".parse().unwrap(),
-            "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY".parse().unwrap(),
-            "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49".parse().unwrap(),
-            "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh".parse().unwrap(),
-            "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt".parse().unwrap(),
-            "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL".parse().unwrap(),
-            "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT".parse().unwrap(),
+            "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5"
+                .parse()
+                .unwrap(),
+            "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe"
+                .parse()
+                .unwrap(),
+            "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY"
+                .parse()
+                .unwrap(),
+            "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49"
+                .parse()
+                .unwrap(),
+            "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh"
+                .parse()
+                .unwrap(),
+            "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt"
+                .parse()
+                .unwrap(),
+            "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL"
+                .parse()
+                .unwrap(),
+            "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT"
+                .parse()
+                .unwrap(),
         ];
 
         // Create rate limiter: 0.5 tokens/second (2s interval per Grok)
@@ -172,7 +185,7 @@ impl JitoBundleClient {
             auth_keypair: Some(auth_keypair), // Store Arc<Keypair> securely
             tip_accounts,
             bundle_timeout: Duration::from_secs(60),
-            max_retries: 1,  // No retries - fail fast and move to next opportunity
+            max_retries: 1, // No retries - fail fast and move to next opportunity
             metrics: Arc::new(Mutex::new(JitoMetrics::default())),
             rate_limiter,
         }
@@ -189,17 +202,15 @@ impl JitoBundleClient {
     /// Create new Jito bundle client (legacy - deprecated, use new_with_keypair_ref)
     #[deprecated(note = "Use new_with_keypair_ref for secure keypair handling")]
     pub fn new(
-        _block_engine_url: String,  // Deprecated
-        _relayer_url: String,  // Deprecated
+        _block_engine_url: String, // Deprecated
+        _relayer_url: String,      // Deprecated
         auth_keypair: Option<solana_sdk::signature::Keypair>,
     ) -> Self {
         // Delegate to new implementation
         Self::new_with_keypair_ref(
             String::new(),
             String::new(),
-            Arc::new(auth_keypair.unwrap_or_else(|| {
-                solana_sdk::signature::Keypair::new()
-            })),
+            Arc::new(auth_keypair.unwrap_or_else(solana_sdk::signature::Keypair::new)),
         )
     }
 
@@ -227,20 +238,22 @@ impl JitoBundleClient {
     /// // Submit securely (tip already in transaction)
     /// let bundle_id = jito_client.submit_bundle_safe(vec![tx]).await?;
     /// ```
-    pub async fn submit_bundle_safe(
-        &self,
-        transactions: Vec<Transaction>,
-    ) -> Result<String> {
+    pub async fn submit_bundle_safe(&self, transactions: Vec<Transaction>) -> Result<String> {
         let start_time = Instant::now();
 
         // RATE LIMITING: Acquire token before proceeding
         // JITO limit: 1 request/second per IP per region
         // IMPORTANT: This rate limit is SHARED across Arb Bot and MEV Bot
         self.rate_limiter.acquire().await;
-        debug!("✅ Rate limiter token acquired (took {}ms)", start_time.elapsed().as_millis());
+        debug!(
+            "✅ Rate limiter token acquired (took {}ms)",
+            start_time.elapsed().as_millis()
+        );
 
-        info!("📦 Submitting SECURE Jito bundle: {} transactions (tips INSIDE transactions)",
-              transactions.len());
+        info!(
+            "📦 Submitting SECURE Jito bundle: {} transactions (tips INSIDE transactions)",
+            transactions.len()
+        );
 
         // Convert to base58 encoded strings
         let encoded_transactions: Result<Vec<String>> = transactions
@@ -257,7 +270,7 @@ impl JitoBundleClient {
         let bundle = JitoBundle {
             uuid: Uuid::new_v4().to_string(),
             transactions: encoded_transactions.clone(),
-            tip_amount: 0, // Not used - tip already in tx
+            tip_amount: 0,                  // Not used - tip already in tx
             tip_account: Pubkey::default(), // Not used
         };
 
@@ -270,7 +283,10 @@ impl JitoBundleClient {
         }
 
         let submission_time = start_time.elapsed().as_millis();
-        info!("✅ SECURE bundle submitted in {}ms: {}", submission_time, bundle_id);
+        info!(
+            "✅ SECURE bundle submitted in {}ms: {}",
+            submission_time, bundle_id
+        );
 
         Ok(bundle_id)
     }
@@ -296,15 +312,21 @@ impl JitoBundleClient {
         // RATE LIMITING: Acquire token before proceeding
         // JITO limit: 1 request/second per IP per region
         self.rate_limiter.acquire().await;
-        debug!("✅ Rate limiter token acquired (took {}ms)", start_time.elapsed().as_millis());
+        debug!(
+            "✅ Rate limiter token acquired (took {}ms)",
+            start_time.elapsed().as_millis()
+        );
 
         // Calculate optimal tip if not provided (minimum 1000 lamports per Jito docs)
         #[allow(deprecated)] // Using legacy method until refactored - see TODO below
-        let tip_amount = tip_lamports.unwrap_or_else(|| self.calculate_optimal_tip()).max(1000);
+        let tip_amount = tip_lamports
+            .unwrap_or_else(|| self.calculate_optimal_tip())
+            .max(1000);
 
         // Select random tip account for load balancing
         use rand::Rng;
-        let tip_account = self.tip_accounts[rand::thread_rng().gen_range(0..self.tip_accounts.len())];
+        let tip_account =
+            self.tip_accounts[rand::thread_rng().gen_range(0..self.tip_accounts.len())];
 
         // CRITICAL FIX: Include tip INSIDE the swap transaction (not as separate transaction)
         // This prevents "unbundling" via uncle blocks where tip executes but swap fails
@@ -347,8 +369,11 @@ impl JitoBundleClient {
             tip_account,
         };
 
-        info!("📦 Submitting Jito bundle: {} transactions, {} lamports tip",
-              bundle.transactions.len(), tip_amount);
+        info!(
+            "📦 Submitting Jito bundle: {} transactions, {} lamports tip",
+            bundle.transactions.len(),
+            tip_amount
+        );
 
         // Submit with retries
         let bundle_id = self.submit_with_retries(&bundle).await?;
@@ -379,7 +404,10 @@ impl JitoBundleClient {
                 }
                 Err(e) => {
                     let error_msg = e.to_string();
-                    warn!("❌ Bundle submission attempt {} failed: {}", attempt, error_msg);
+                    warn!(
+                        "❌ Bundle submission attempt {} failed: {}",
+                        attempt, error_msg
+                    );
 
                     // Rotate endpoint on 429 errors (Grok recommendation)
                     if error_msg.contains("429") {
@@ -416,7 +444,7 @@ impl JitoBundleClient {
             jsonrpc: "2.0".to_string(),
             id: rand::thread_rng().gen::<u64>(),
             method: "sendBundle".to_string(),
-            params: vec![bundle.transactions.clone()],  // Double-wrap: [[txs]]
+            params: vec![bundle.transactions.clone()], // Double-wrap: [[txs]]
         };
 
         debug!("🌐 Submitting to: {}", current_endpoint);
@@ -424,7 +452,7 @@ impl JitoBundleClient {
         let response = timeout(
             Duration::from_secs(30),
             self.client
-                .post(&format!("{}/api/v1/bundles", current_endpoint))
+                .post(format!("{}/api/v1/bundles", current_endpoint))
                 .header("Content-Type", "application/json")
                 .json(&request)
                 .send(),
@@ -442,7 +470,11 @@ impl JitoBundleClient {
         let bundle_response: BundleSubmissionResponse = response.json().await?;
 
         if let Some(error) = bundle_response.error {
-            return Err(anyhow::anyhow!("Jito error {}: {}", error.code, error.message));
+            return Err(anyhow::anyhow!(
+                "Jito error {}: {}",
+                error.code,
+                error.message
+            ));
         }
 
         bundle_response
@@ -464,21 +496,21 @@ impl JitoBundleClient {
     /// 2. Add tip instruction to same instruction list
     /// 3. Sign as single transaction
     /// 4. Submit in bundle
-    #[deprecated(note = "Creates separate tip transaction - SECURITY RISK! Include tip IN swap tx instead")]
+    #[deprecated(
+        note = "Creates separate tip transaction - SECURITY RISK! Include tip IN swap tx instead"
+    )]
     fn create_tip_transaction_legacy(
         &self,
         tip_lamports: u64,
         tip_account: Pubkey,
     ) -> Result<Transaction> {
-        let auth_keypair = self.auth_keypair
+        let auth_keypair = self
+            .auth_keypair
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Auth keypair required for tip transactions"))?;
 
-        let tip_instruction = system_instruction::transfer(
-            &auth_keypair.pubkey(),
-            &tip_account,
-            tip_lamports,
-        );
+        let tip_instruction =
+            system_instruction::transfer(&auth_keypair.pubkey(), &tip_account, tip_lamports);
 
         // Add compute budget to ensure tip transaction processes quickly
         let compute_budget_instruction = ComputeBudgetInstruction::set_compute_unit_price(50_000);
@@ -558,7 +590,8 @@ impl JitoBundleClient {
         };
 
         // Adjust based on recent success rate and confirmation times
-        let (success_rate_multiplier, latency_multiplier) = if let Ok(metrics) = self.metrics.lock() {
+        let (success_rate_multiplier, latency_multiplier) = if let Ok(metrics) = self.metrics.lock()
+        {
             let success_rate_mult = if metrics.bundle_success_rate < 0.5 {
                 1.5 // Increase tip 50% if success rate is low
             } else if metrics.bundle_success_rate > 0.9 {
@@ -597,13 +630,18 @@ impl JitoBundleClient {
         // Ensure minimum tip (95th percentile)
         let final_tip = capped_tip.max(MIN_TIP_LAMPORTS);
 
-        debug!("💰 Calculated optimal tip: {} lamports (0.{:06} SOL)",
-               final_tip, final_tip / 1000);
+        debug!(
+            "💰 Calculated optimal tip: {} lamports (0.{:06} SOL)",
+            final_tip,
+            final_tip / 1000
+        );
 
         if let Some(profit) = expected_profit_lamports {
             let tip_percentage = (final_tip as f64 / profit as f64) * 100.0;
-            debug!("   Expected profit: {} lamports, Tip: {:.1}% of profit",
-                   profit, tip_percentage);
+            debug!(
+                "   Expected profit: {} lamports, Tip: {:.1}% of profit",
+                profit, tip_percentage
+            );
         }
 
         final_tip
@@ -623,7 +661,8 @@ impl JitoBundleClient {
         let start_time = Instant::now();
         let mut check_interval = tokio::time::interval(Duration::from_millis(500));
 
-        for _ in 0..120 { // Monitor for up to 60 seconds
+        for _ in 0..120 {
+            // Monitor for up to 60 seconds
             check_interval.tick().await;
 
             match self.get_bundle_status(&bundle_id).await {
@@ -684,7 +723,7 @@ impl JitoBundleClient {
         let response = timeout(
             Duration::from_secs(10),
             self.client
-                .post(&format!("{}/api/v1/bundles", current_endpoint))
+                .post(format!("{}/api/v1/bundles", current_endpoint))
                 .header("Content-Type", "application/json")
                 .json(&request)
                 .send(),
@@ -710,10 +749,13 @@ impl JitoBundleClient {
 
     /// Get bundle performance metrics
     pub fn get_metrics(&self) -> JitoMetrics {
-        self.metrics.lock().unwrap_or_else(|poisoned_guard| {
-            warn!("Mutex poisoned for metrics, returning default");
-            poisoned_guard.into_inner()
-        }).clone()
+        self.metrics
+            .lock()
+            .unwrap_or_else(|poisoned_guard| {
+                warn!("Mutex poisoned for metrics, returning default");
+                poisoned_guard.into_inner()
+            })
+            .clone()
     }
 
     /// Reset metrics
@@ -742,7 +784,7 @@ impl JitoBundleClient {
         let response = timeout(
             Duration::from_secs(5),
             self.client
-                .post(&format!("{}/api/v1/bundles", current_endpoint))
+                .post(format!("{}/api/v1/bundles", current_endpoint))
                 .header("Content-Type", "application/json")
                 .json(&request)
                 .send(),

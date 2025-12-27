@@ -12,22 +12,21 @@
 // CURRENT IMPLEMENTATION: In-memory cache with manual registration
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use tracing::{debug, info, warn};
-use reqwest;
-use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock as TokioRwLock;  // For async validation cache
+use tokio::sync::RwLock as TokioRwLock;
+use tracing::{debug, info, warn}; // For async validation cache
 
-use crate::types::{DexType, PoolInfo};
 use crate::rpc_client::SolanaRpcClient;
+use crate::types::{DexType, PoolInfo};
 
 // Pool validation constants (Grok's ghost pool solution)
-const MIN_POOL_SIZE: usize = 1000;  // Minimum bytes for valid pool (DEX-specific)
-const VALIDATION_TTL_SECS: u64 = 300;  // 5 minutes cache TTL
-const BACKGROUND_INTERVAL_SECS: u64 = 120;  // 2 minutes background validation
+const MIN_POOL_SIZE: usize = 1000; // Minimum bytes for valid pool (DEX-specific)
+const VALIDATION_TTL_SECS: u64 = 300; // 5 minutes cache TTL
+const BACKGROUND_INTERVAL_SECS: u64 = 120; // 2 minutes background validation
 
 /// Cache entry for resolved pool addresses
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,10 +66,10 @@ pub struct PoolRegistry {
 /// Statistics for pool resolution performance
 #[derive(Debug, Default)]
 struct ResolutionStats {
-    layer1_hits: u64,  // In-memory cache hits
-    layer2_hits: u64,  // ShredStream API hits
-    layer3_hits: u64,  // SQLite cache hits (future)
-    layer4_hits: u64,  // On-chain RPC hits
+    layer1_hits: u64, // In-memory cache hits
+    layer2_hits: u64, // ShredStream API hits
+    layer3_hits: u64, // SQLite cache hits (future)
+    layer4_hits: u64, // On-chain RPC hits
     total_lookups: u64,
     total_latency_ms: u64,
 }
@@ -81,19 +80,22 @@ impl PoolRegistry {
         let shredstream_url = std::env::var("SHREDSTREAM_SERVICE_URL")
             .unwrap_or_else(|_| "http://localhost:8080".to_string());
 
-        info!("✅ Pool registry initialized with ShredStream API: {}", shredstream_url);
+        info!(
+            "✅ Pool registry initialized with ShredStream API: {}",
+            shredstream_url
+        );
 
         Self {
             pools: Arc::new(RwLock::new(HashMap::new())),
             address_to_id: Arc::new(RwLock::new(HashMap::new())),
             rpc_client,
             http_client: reqwest::Client::builder()
-                .timeout(Duration::from_millis(500))  // 500ms timeout for ShredStream API
+                .timeout(Duration::from_millis(500)) // 500ms timeout for ShredStream API
                 .build()
                 .expect("Failed to create HTTP client"),
             shredstream_url,
             resolution_stats: Arc::new(RwLock::new(ResolutionStats::default())),
-            validation_cache: Arc::new(TokioRwLock::new(HashMap::new())),  // Grok's ghost pool solution
+            validation_cache: Arc::new(TokioRwLock::new(HashMap::new())), // Grok's ghost pool solution
         }
     }
 
@@ -104,7 +106,10 @@ impl PoolRegistry {
         // Validate short ID matches address prefix
         let address_str = full_address.to_string();
         if !address_str.starts_with(&short_id) {
-            warn!("⚠️ Short ID {} doesn't match address prefix {}", short_id, address_str);
+            warn!(
+                "⚠️ Short ID {} doesn't match address prefix {}",
+                short_id, address_str
+            );
         }
 
         // Store in both maps
@@ -150,7 +155,8 @@ impl PoolRegistry {
     pub fn fetch_pool_state(&self, pool_address: &Pubkey) -> Result<Vec<u8>> {
         debug!("Fetching pool state for: {}", pool_address);
 
-        let data = self.rpc_client
+        let data = self
+            .rpc_client
             .get_account_data(pool_address)
             .context("Failed to fetch pool state")?;
 
@@ -174,7 +180,10 @@ impl PoolRegistry {
             stats.total_lookups += 1;
         } // Lock released immediately
 
-        debug!("🔍 Resolving pool address for: {} ({:?})", short_id, dex_type);
+        debug!(
+            "🔍 Resolving pool address for: {} ({:?})",
+            short_id, dex_type
+        );
 
         // LAYER 1: Check in-memory registry (fastest - 1-5ms)
         if let Some(pool_info) = self.get_pool(short_id) {
@@ -251,16 +260,20 @@ impl PoolRegistry {
                     stats.total_latency_ms += latency;
                 } // Lock released immediately
 
-                warn!("⚠️ Layer 4 HIT: Found via on-chain RPC ({}ms) - SLOW!", latency);
+                warn!(
+                    "⚠️ Layer 4 HIT: Found via on-chain RPC ({}ms) - SLOW!",
+                    latency
+                );
 
                 // FILTER: Reject old Pump.fun bonding curve (NOT arbitrageable)
                 // Allow PumpSwap AMM (post-migration, standard AMM like Raydium)
                 match self.rpc_client.get_account_owner(&full_address) {
                     Ok(owner) => {
                         // OLD Pump.fun bonding curve program (pre-migration)
-                        let old_pump_fun_bonding: Pubkey = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
-                            .parse()
-                            .unwrap();
+                        let old_pump_fun_bonding: Pubkey =
+                            "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+                                .parse()
+                                .unwrap();
 
                         // PumpSwap AMM program (post-migration) - ALLOW
                         let pumpswap_amm: Pubkey = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
@@ -276,7 +289,10 @@ impl PoolRegistry {
                         }
 
                         if owner == pumpswap_amm {
-                            debug!("✅ PumpSwap AMM pool detected (post-migration, arbitrageable): {}", full_address);
+                            debug!(
+                                "✅ PumpSwap AMM pool detected (post-migration, arbitrageable): {}",
+                                full_address
+                            );
                         }
                     }
                     Err(e) => {
@@ -307,7 +323,10 @@ impl PoolRegistry {
                     stats.total_latency_ms += latency;
                 } // Lock released immediately
 
-                warn!("❌ Layer 4 MISS: On-chain lookup failed ({}ms): {}", latency, e);
+                warn!(
+                    "❌ Layer 4 MISS: On-chain lookup failed ({}ms): {}",
+                    latency, e
+                );
             }
         }
 
@@ -326,7 +345,8 @@ impl PoolRegistry {
 
         debug!("📡 Querying ShredStream API: {}", url);
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .get(&url)
             .timeout(Duration::from_millis(500))
             .send()
@@ -334,7 +354,10 @@ impl PoolRegistry {
             .context("ShredStream API request failed")?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!("ShredStream API returned status: {}", response.status()));
+            return Err(anyhow::anyhow!(
+                "ShredStream API returned status: {}",
+                response.status()
+            ));
         }
 
         let pool_response: ShredStreamPoolResponse = response
@@ -343,34 +366,57 @@ impl PoolRegistry {
             .context("Failed to parse ShredStream API response")?;
 
         // Try both possible field names
-        let address_str = pool_response.full_address
+        let address_str = pool_response
+            .full_address
             .or(pool_response.pool_address)
             .ok_or_else(|| anyhow::anyhow!("ShredStream API response missing pool address"))?;
 
-        address_str.parse::<Pubkey>()
+        address_str
+            .parse::<Pubkey>()
             .context("Failed to parse pool address from ShredStream API")
     }
 
     /// Query on-chain using getProgramAccounts (Layer 4 - SLOW)
     async fn query_on_chain(&self, short_id: &str, dex_type: &DexType) -> Result<Pubkey> {
-        debug!("🔗 Querying on-chain for pool: {} ({:?})", short_id, dex_type);
+        debug!(
+            "🔗 Querying on-chain for pool: {} ({:?})",
+            short_id, dex_type
+        );
 
         // Get the program ID for this DEX type (reserved for future validation)
         let _program_id = match dex_type {
             // Meteora variants
-            DexType::MeteoraDammV1 => "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB".parse::<Pubkey>()?,
-            DexType::MeteoraDammV2 => "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG".parse::<Pubkey>()?,
-            DexType::MeteoraDlmm => "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo".parse::<Pubkey>()?,
+            DexType::MeteoraDammV1 => {
+                "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB".parse::<Pubkey>()?
+            }
+            DexType::MeteoraDammV2 => {
+                "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG".parse::<Pubkey>()?
+            }
+            DexType::MeteoraDlmm => {
+                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo".parse::<Pubkey>()?
+            }
 
             // Orca variants
-            DexType::OrcaWhirlpools => "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".parse::<Pubkey>()?,
-            DexType::OrcaLegacy => "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP".parse::<Pubkey>()?,
+            DexType::OrcaWhirlpools => {
+                "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".parse::<Pubkey>()?
+            }
+            DexType::OrcaLegacy => {
+                "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP".parse::<Pubkey>()?
+            }
 
             // Raydium variants (note: AMM V4 and CPMM share same program ID)
-            DexType::RaydiumAmmV4 => "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8".parse::<Pubkey>()?,
-            DexType::RaydiumClmm => "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".parse::<Pubkey>()?,
-            DexType::RaydiumCpmm => "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C".parse::<Pubkey>()?,
-            DexType::RaydiumStable => "5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h".parse::<Pubkey>()?,
+            DexType::RaydiumAmmV4 => {
+                "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8".parse::<Pubkey>()?
+            }
+            DexType::RaydiumClmm => {
+                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".parse::<Pubkey>()?
+            }
+            DexType::RaydiumCpmm => {
+                "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C".parse::<Pubkey>()?
+            }
+            DexType::RaydiumStable => {
+                "5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h".parse::<Pubkey>()?
+            }
 
             // Other DEXes
             DexType::PumpSwap => "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA".parse::<Pubkey>()?,
@@ -380,8 +426,12 @@ impl PoolRegistry {
             DexType::Saros => "SSwpkEEWHvCXCNWnMYXVW7gCYDXkF4aQMxKdpEqrZks".parse::<Pubkey>()?,
             DexType::Crema => "6MLxLqiXaaSUpkgMnWDTuejNZEz3kE7k2woyHGVFw319".parse::<Pubkey>()?,
             DexType::Cropper => "CTMAxxk34HjKWxQ3QLZQA1EQdxtjbYGP4Qjrw7nTn8bM".parse::<Pubkey>()?,
-            DexType::Lifinity => "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S".parse::<Pubkey>()?,
-            DexType::Fluxbeam => "FLUXBmPhT3Fd1EDVFdg46YREqHBeNypn1h4EbnTzWERX".parse::<Pubkey>()?,
+            DexType::Lifinity => {
+                "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S".parse::<Pubkey>()?
+            }
+            DexType::Fluxbeam => {
+                "FLUXBmPhT3Fd1EDVFdg46YREqHBeNypn1h4EbnTzWERX".parse::<Pubkey>()?
+            }
             DexType::HumidiFi => "9H6tuB8C3VnXcBLKFJGPqpFu1F2Bwsa7eJvbw8Tq6Rp".parse::<Pubkey>()?,
         };
 
@@ -497,7 +547,10 @@ impl PoolRegistry {
 
         for short_id in pool_short_ids {
             // Try to resolve using any DEX type (we just need the address)
-            match self.resolve_pool_address(short_id, &DexType::OrcaWhirlpools).await {
+            match self
+                .resolve_pool_address(short_id, &DexType::OrcaWhirlpools)
+                .await
+            {
                 Ok(addr) => {
                     addresses.push(addr);
                     valid_ids.push(short_id.clone());
@@ -506,7 +559,10 @@ impl PoolRegistry {
                     // Can't resolve - mark as invalid
                     let mut cache = self.validation_cache.write().await;
                     cache.insert(short_id.clone(), (false, Instant::now()));
-                    debug!("⚠️ Pool {} could not be resolved - marked invalid", short_id);
+                    debug!(
+                        "⚠️ Pool {} could not be resolved - marked invalid",
+                        short_id
+                    );
                 }
             }
         }
@@ -527,8 +583,12 @@ impl PoolRegistry {
                 Ok(data) => {
                     let valid = !data.is_empty() && data.len() >= MIN_POOL_SIZE;
                     if !valid {
-                        debug!("⚠️ Pool {} exists but too small ({} bytes < {} min)",
-                               short_id, data.len(), MIN_POOL_SIZE);
+                        debug!(
+                            "⚠️ Pool {} exists but too small ({} bytes < {} min)",
+                            short_id,
+                            data.len(),
+                            MIN_POOL_SIZE
+                        );
                     }
                     valid
                 }
@@ -554,7 +614,10 @@ impl PoolRegistry {
     /// Runs async without blocking main flow
     pub fn start_background_validation(self: Arc<Self>, top_pools: Vec<String>) {
         tokio::spawn(async move {
-            info!("🔄 Starting background pool validation (every {} seconds)", BACKGROUND_INTERVAL_SECS);
+            info!(
+                "🔄 Starting background pool validation (every {} seconds)",
+                BACKGROUND_INTERVAL_SECS
+            );
             info!("   Validating top {} pools by volume", top_pools.len());
 
             loop {
@@ -563,7 +626,10 @@ impl PoolRegistry {
                 if let Err(e) = self.validate_pools_batch(&top_pools).await {
                     warn!("⚠️ Background validation error: {:?}", e);
                 } else {
-                    debug!("✅ Background validation cycle complete ({} pools)", top_pools.len());
+                    debug!(
+                        "✅ Background validation cycle complete ({} pools)",
+                        top_pools.len()
+                    );
                 }
             }
         });
@@ -590,7 +656,9 @@ mod tests {
         let registry = PoolRegistry::new(rpc_client);
 
         // Create a test pool
-        let pool_address: Pubkey = "81vA2wJxKyUE8RHKXxT5VfEQnJGYvJ9FTBwJQhRZHvqX".parse().unwrap();
+        let pool_address: Pubkey = "81vA2wJxKyUE8RHKXxT5VfEQnJGYvJ9FTBwJQhRZHvqX"
+            .parse()
+            .unwrap();
         let pool_info = PoolInfo {
             full_address: pool_address,
             dex_type: DexType::MeteoraDammV2,
@@ -601,7 +669,9 @@ mod tests {
         };
 
         // Register pool
-        registry.register_pool("81vA2wJx".to_string(), pool_info).unwrap();
+        registry
+            .register_pool("81vA2wJx".to_string(), pool_info)
+            .unwrap();
 
         // Verify registration
         assert_eq!(registry.pool_count(), 1);

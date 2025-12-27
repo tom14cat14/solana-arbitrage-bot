@@ -1,0 +1,22 @@
+# Arb_Bot
+
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/YOUR_PROJECT_ID)](https://www.codacy.com)
+[![Codacy Security Scan](https://github.com/YOUR_USERNAME/Arb_Bot/actions/workflows/codacy-analysis.yml/badge.svg)](https://github.com/YOUR_USERNAME/Arb_Bot/actions/workflows/codacy-analysis.yml)
+
+## Overview
+[Add project description]
+
+## Setup
+[Add setup instructions]
+
+## Development
+See `claw.md` for detailed development instructions.
+
+## Code Quality
+- Automated code analysis via Codacy
+- Auto-fix PRs generated daily
+- All code changes must pass quality checks
+
+---
+**Codacy Integration**: Active
+**Auto-Fix**: Enabled

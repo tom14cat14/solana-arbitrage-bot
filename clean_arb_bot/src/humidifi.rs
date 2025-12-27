@@ -31,7 +31,7 @@ pub struct HumidiFiPool {
     pub token_a_vault: Pubkey,
     pub token_b_vault: Pubkey,
     pub pool_authority: Pubkey,
-    pub fee_rate: u16,  // Basis points (e.g., 5 = 0.05%)
+    pub fee_rate: u16, // Basis points (e.g., 5 = 0.05%)
 }
 
 pub struct HumidiFiSwapBuilder {
@@ -41,11 +41,11 @@ pub struct HumidiFiSwapBuilder {
 
 impl HumidiFiSwapBuilder {
     pub fn new() -> Result<Self> {
-        let program_id = Pubkey::from_str(HUMIDIFI_PROGRAM_ID)
-            .context("Invalid HumidiFi program ID")?;
+        let program_id =
+            Pubkey::from_str(HUMIDIFI_PROGRAM_ID).context("Invalid HumidiFi program ID")?;
 
-        let token_program_id = Pubkey::from_str(SPL_TOKEN_PROGRAM_ID)
-            .context("Invalid SPL Token program ID")?;
+        let token_program_id =
+            Pubkey::from_str(SPL_TOKEN_PROGRAM_ID).context("Invalid SPL Token program ID")?;
 
         info!("✅ HumidiFi swap builder initialized with VERIFIED instruction format");
         info!("   Program ID: {} (verified from Solscan)", program_id);
@@ -69,25 +69,40 @@ impl HumidiFiSwapBuilder {
         user_wallet: &Pubkey,
         amount_in: u64,
         minimum_amount_out: u64,
-        swap_a_to_b: bool,  // true = TokenA -> TokenB, false = TokenB -> TokenA
+        swap_a_to_b: bool, // true = TokenA -> TokenB, false = TokenB -> TokenA
     ) -> Result<Instruction> {
         debug!("🔨 Building HumidiFi swap instruction");
         debug!("   Pool: {}", pool.pool_address);
         debug!("   Amount in: {}", amount_in);
         debug!("   Min amount out: {}", minimum_amount_out);
-        debug!("   Direction: {}", if swap_a_to_b { "A->B" } else { "B->A" });
+        debug!(
+            "   Direction: {}",
+            if swap_a_to_b { "A->B" } else { "B->A" }
+        );
 
         // Derive user's token accounts
         let user_source_token = if swap_a_to_b {
-            spl_associated_token_account::get_associated_token_address(user_wallet, &pool.token_a_mint)
+            spl_associated_token_account::get_associated_token_address(
+                user_wallet,
+                &pool.token_a_mint,
+            )
         } else {
-            spl_associated_token_account::get_associated_token_address(user_wallet, &pool.token_b_mint)
+            spl_associated_token_account::get_associated_token_address(
+                user_wallet,
+                &pool.token_b_mint,
+            )
         };
 
         let user_destination_token = if swap_a_to_b {
-            spl_associated_token_account::get_associated_token_address(user_wallet, &pool.token_b_mint)
+            spl_associated_token_account::get_associated_token_address(
+                user_wallet,
+                &pool.token_b_mint,
+            )
         } else {
-            spl_associated_token_account::get_associated_token_address(user_wallet, &pool.token_a_mint)
+            spl_associated_token_account::get_associated_token_address(
+                user_wallet,
+                &pool.token_a_mint,
+            )
         };
 
         // Get pool's vault accounts
@@ -117,13 +132,13 @@ impl HumidiFiSwapBuilder {
         // Transaction: 4N1LB4c5Jii7CoBryiX6gwAC6Edv9en2umFN7oz6jDtj6F97xKrdWqkdy2gnnVzyg3wf715XyNtffnQQmKgejhT
         // This transaction consumed 33,310 CUs with 9 accounts (typical swap, not oracle update)
         let accounts = vec![
-            AccountMeta::new_readonly(*user_wallet, true),           // [0] User wallet (signer)
-            AccountMeta::new_readonly(pool.pool_address, false),     // [1] Pool state/authority account
-            AccountMeta::new(pool_source_vault, false),              // [2] Pool's source token vault
-            AccountMeta::new(pool_destination_vault, false),         // [3] Pool's destination token vault
-            AccountMeta::new(user_source_token, false),              // [4] User's source token account
-            AccountMeta::new(user_destination_token, false),         // [5] User's destination token account
-            AccountMeta::new_readonly(sysvar::clock::id(), false),   // [6] Clock sysvar
+            AccountMeta::new_readonly(*user_wallet, true), // [0] User wallet (signer)
+            AccountMeta::new_readonly(pool.pool_address, false), // [1] Pool state/authority account
+            AccountMeta::new(pool_source_vault, false),    // [2] Pool's source token vault
+            AccountMeta::new(pool_destination_vault, false), // [3] Pool's destination token vault
+            AccountMeta::new(user_source_token, false),    // [4] User's source token account
+            AccountMeta::new(user_destination_token, false), // [5] User's destination token account
+            AccountMeta::new_readonly(sysvar::clock::id(), false), // [6] Clock sysvar
             AccountMeta::new_readonly(self.token_program_id, false), // [7] SPL Token program
             AccountMeta::new_readonly(sysvar::instructions::id(), false), // [8] Instructions sysvar
         ];
@@ -160,29 +175,34 @@ impl HumidiFiSwapBuilder {
         };
 
         // Build single instruction
-        let instruction = self.build_swap_instruction(&pool, &user_wallet, amount_in, minimum_amount_out, swap_a_to_b)?;
+        let instruction = self.build_swap_instruction(
+            &pool,
+            &user_wallet,
+            amount_in,
+            minimum_amount_out,
+            swap_a_to_b,
+        )?;
 
         Ok(vec![instruction])
     }
 
     /// Derive pool accounts from pool address and token mints
-    fn derive_pool_accounts(&self, pool_address: &Pubkey, token_a_mint: &Pubkey, token_b_mint: &Pubkey) -> Result<HumidiFiPool> {
+    fn derive_pool_accounts(
+        &self,
+        pool_address: &Pubkey,
+        token_a_mint: &Pubkey,
+        token_b_mint: &Pubkey,
+    ) -> Result<HumidiFiPool> {
         // Derive pool authority (PDA)
-        let (pool_authority, _bump) = Pubkey::find_program_address(
-            &[b"authority", pool_address.as_ref()],
-            &self.program_id,
-        );
+        let (pool_authority, _bump) =
+            Pubkey::find_program_address(&[b"authority", pool_address.as_ref()], &self.program_id);
 
         // Derive vault accounts (PDAs)
-        let (token_a_vault, _bump_a) = Pubkey::find_program_address(
-            &[b"vault_a", pool_address.as_ref()],
-            &self.program_id,
-        );
+        let (token_a_vault, _bump_a) =
+            Pubkey::find_program_address(&[b"vault_a", pool_address.as_ref()], &self.program_id);
 
-        let (token_b_vault, _bump_b) = Pubkey::find_program_address(
-            &[b"vault_b", pool_address.as_ref()],
-            &self.program_id,
-        );
+        let (token_b_vault, _bump_b) =
+            Pubkey::find_program_address(&[b"vault_b", pool_address.as_ref()], &self.program_id);
 
         Ok(HumidiFiPool {
             pool_address: *pool_address,
@@ -191,7 +211,7 @@ impl HumidiFiSwapBuilder {
             token_a_vault,
             token_b_vault,
             pool_authority,
-            fee_rate: 5,  // 0.05% estimated for dark pool
+            fee_rate: 5, // 0.05% estimated for dark pool
         })
     }
 
@@ -213,9 +233,9 @@ impl HumidiFiSwapBuilder {
             pool_address: pool.pool_address,
             token_a: pool.token_a_mint,
             token_b: pool.token_b_mint,
-            fee_rate: 0.0005,  // 0.05% estimated (very low for dark pools)
-            liquidity_a: 0,     // Hidden in dark pool
-            liquidity_b: 0,     // Hidden in dark pool
+            fee_rate: 0.0005, // 0.05% estimated (very low for dark pools)
+            liquidity_a: 0,   // Hidden in dark pool
+            liquidity_b: 0,   // Hidden in dark pool
         })
     }
 
@@ -225,7 +245,7 @@ impl HumidiFiSwapBuilder {
         amount_in: u64,
         reserve_in: u64,
         reserve_out: u64,
-        fee_rate: u16,  // Basis points (e.g., 5 = 0.05%)
+        fee_rate: u16, // Basis points (e.g., 5 = 0.05%)
     ) -> Result<u64> {
         // Dark pools typically use more sophisticated pricing
         // This is a simplified constant-product approximation
@@ -253,9 +273,9 @@ pub struct HumidiFiPoolInfo {
     pub pool_address: Pubkey,
     pub token_a: Pubkey,
     pub token_b: Pubkey,
-    pub fee_rate: f64,      // Typically very low (0.05% or less)
-    pub liquidity_a: u64,    // May be hidden (dark pool)
-    pub liquidity_b: u64,    // May be hidden (dark pool)
+    pub fee_rate: f64,    // Typically very low (0.05% or less)
+    pub liquidity_a: u64, // May be hidden (dark pool)
+    pub liquidity_b: u64, // May be hidden (dark pool)
 }
 
 // Instruction discriminators (VERIFIED from on-chain transaction data)

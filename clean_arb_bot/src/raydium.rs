@@ -17,9 +17,9 @@ use solana_sdk::{
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use crate::types::SwapParams;
-use crate::rpc_client::SolanaRpcClient;
 use crate::pool_registry::PoolRegistry;
+use crate::rpc_client::SolanaRpcClient;
+use crate::types::SwapParams;
 
 /// Raydium swap instruction builder (supports all variants)
 pub struct RaydiumSwapBuilder {
@@ -45,10 +45,7 @@ impl RaydiumSwapBuilder {
     pub const STABLE_PROGRAM_ID: &'static str = "5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h";
 
     /// Create new Raydium swap builder
-    pub fn new(
-        rpc_client: Arc<SolanaRpcClient>,
-        pool_registry: Arc<PoolRegistry>,
-    ) -> Result<Self> {
+    pub fn new(rpc_client: Arc<SolanaRpcClient>, pool_registry: Arc<PoolRegistry>) -> Result<Self> {
         let program_id = Self::AMM_V4_PROGRAM_ID
             .parse()
             .context("Failed to parse Raydium AMM V4 program ID")?;
@@ -81,26 +78,35 @@ impl RaydiumSwapBuilder {
         swap_params: &SwapParams,
         user_pubkey: &Pubkey,
     ) -> Result<Instruction> {
-        debug!("Building Raydium swap instruction for pool: {}", pool_short_id);
+        debug!(
+            "Building Raydium swap instruction for pool: {}",
+            pool_short_id
+        );
 
         // Step 1: Resolve pool address from short ID
         // Try all Raydium variants (AMM V4 most common, then CPMM, CLMM, Stable)
-        let pool_address = match self.pool_registry
+        let pool_address = match self
+            .pool_registry
             .resolve_pool_address(pool_short_id, &crate::types::DexType::RaydiumAmmV4)
             .await
         {
             Ok(addr) => addr,
             Err(_) => {
                 // Try CPMM if AMM V4 fails
-                match self.pool_registry
+                match self
+                    .pool_registry
                     .resolve_pool_address(pool_short_id, &crate::types::DexType::RaydiumCpmm)
                     .await
                 {
                     Ok(addr) => addr,
                     Err(_) => {
                         // Try CLMM if CPMM fails
-                        match self.pool_registry
-                            .resolve_pool_address(pool_short_id, &crate::types::DexType::RaydiumClmm)
+                        match self
+                            .pool_registry
+                            .resolve_pool_address(
+                                pool_short_id,
+                                &crate::types::DexType::RaydiumClmm,
+                            )
                             .await
                         {
                             Ok(addr) => addr,
@@ -117,14 +123,22 @@ impl RaydiumSwapBuilder {
             }
         };
 
-        debug!("✅ Resolved pool {} to address: {}", pool_short_id, pool_address);
+        debug!(
+            "✅ Resolved pool {} to address: {}",
+            pool_short_id, pool_address
+        );
 
         // GROK GHOST POOL SOLUTION - STEP 3: Early validation check (should be cached from arbitrage engine)
         // This is a safety fallback - normally pools are validated before execution
         if self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true) {
             // Rare case: validate on-demand if not cached
-            warn!("⚠️ Pool {} not in cache, validating on-demand", pool_short_id);
-            self.pool_registry.validate_pools_batch(&[pool_short_id.to_string()]).await?;
+            warn!(
+                "⚠️ Pool {} not in cache, validating on-demand",
+                pool_short_id
+            );
+            self.pool_registry
+                .validate_pools_batch(&[pool_short_id.to_string()])
+                .await?;
 
             // Double-check after validation
             if self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true) {
@@ -138,15 +152,16 @@ impl RaydiumSwapBuilder {
         debug!("✅ Pool validated (cached), proceeding to fetch state");
 
         // Get pool info for token mints
-        let pool_info = self.pool_registry
-            .get_pool(pool_short_id)
-            .ok_or_else(|| anyhow::anyhow!(
+        let pool_info = self.pool_registry.get_pool(pool_short_id).ok_or_else(|| {
+            anyhow::anyhow!(
                 "Pool {} resolved but info not cached. This shouldn't happen.",
                 pool_short_id
-            ))?;
+            )
+        })?;
 
         // Step 2: Fetch pool state from blockchain
-        let pool_state = self.fetch_pool_state(&pool_address)
+        let pool_state = self
+            .fetch_pool_state(&pool_address)
             .context("Failed to fetch pool state")?;
 
         debug!("✅ Got pool state ({} bytes)", pool_state.len());
@@ -214,7 +229,10 @@ impl RaydiumSwapBuilder {
         let mut setup_instructions = Vec::new();
 
         if !self.rpc_client.account_exists(&user_token_in)? {
-            info!("🔧 Creating associated token account for input token: {}", user_token_in);
+            info!(
+                "🔧 Creating associated token account for input token: {}",
+                user_token_in
+            );
 
             let token_mint = if swap_params.swap_a_to_b {
                 &pool_info.token_a_mint
@@ -222,19 +240,23 @@ impl RaydiumSwapBuilder {
                 &pool_info.token_b_mint
             };
 
-            let create_ata_ix = spl_associated_token_account::instruction::create_associated_token_account(
-                user_pubkey,      // Payer
-                user_pubkey,      // Owner of new account
-                token_mint,       // Token mint
-                &spl_token::id(), // Token program ID
-            );
+            let create_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account(
+                    user_pubkey,      // Payer
+                    user_pubkey,      // Owner of new account
+                    token_mint,       // Token mint
+                    &spl_token::id(), // Token program ID
+                );
 
             setup_instructions.push(create_ata_ix);
             info!("✅ ATA creation instruction added - account will be created in transaction");
         }
 
         if !self.rpc_client.account_exists(&user_token_out)? {
-            info!("🔧 Creating associated token account for output token: {}", user_token_out);
+            info!(
+                "🔧 Creating associated token account for output token: {}",
+                user_token_out
+            );
 
             let token_mint = if swap_params.swap_a_to_b {
                 &pool_info.token_b_mint
@@ -242,12 +264,13 @@ impl RaydiumSwapBuilder {
                 &pool_info.token_a_mint
             };
 
-            let create_ata_ix = spl_associated_token_account::instruction::create_associated_token_account(
-                user_pubkey,      // Payer
-                user_pubkey,      // Owner of new account
-                token_mint,       // Token mint
-                &spl_token::id(), // Token program ID
-            );
+            let create_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account(
+                    user_pubkey,      // Payer
+                    user_pubkey,      // Owner of new account
+                    token_mint,       // Token mint
+                    &spl_token::id(), // Token program ID
+                );
 
             setup_instructions.push(create_ata_ix);
             info!("✅ ATA creation instruction added for output - account will be created in transaction");
@@ -270,19 +293,36 @@ impl RaydiumSwapBuilder {
         all_instructions.push(instruction);
 
         if all_instructions.len() > 1 {
-            info!("✅ Built {} instructions ({} setup + 1 swap)", all_instructions.len(), all_instructions.len() - 1);
+            info!(
+                "✅ Built {} instructions ({} setup + 1 swap)",
+                all_instructions.len(),
+                all_instructions.len() - 1
+            );
         } else {
             info!("✅ Built Raydium CPMM swap instruction");
         }
         info!("   Pool: {}", pool_address);
         info!("   Amount in: {} lamports", swap_params.amount_in);
-        info!("   Min amount out: {} lamports", swap_params.minimum_amount_out);
-        info!("   Direction: {}", if swap_params.swap_a_to_b { "Coin→PC" } else { "PC→Coin" });
+        info!(
+            "   Min amount out: {} lamports",
+            swap_params.minimum_amount_out
+        );
+        info!(
+            "   Direction: {}",
+            if swap_params.swap_a_to_b {
+                "Coin→PC"
+            } else {
+                "PC→Coin"
+            }
+        );
 
         // CRITICAL FIX: For now, we need to return a single instruction
         // But we should log a warning if we're dropping ATA creation instructions
         if all_instructions.len() > 1 {
-            warn!("⚠️ CRITICAL: Dropping {} ATA creation instructions!", all_instructions.len() - 1);
+            warn!(
+                "⚠️ CRITICAL: Dropping {} ATA creation instructions!",
+                all_instructions.len() - 1
+            );
             warn!("   This will cause transaction failures if ATAs don't exist");
             warn!("   TODO: Update function signature to return Vec<Instruction>");
         }
@@ -415,7 +455,10 @@ impl RaydiumSwapBuilder {
             data,
         };
 
-        debug!("Built Raydium CPMM instruction with {} accounts", instruction.accounts.len());
+        debug!(
+            "Built Raydium CPMM instruction with {} accounts",
+            instruction.accounts.len()
+        );
         debug!("Instruction data length: {} bytes", instruction.data.len());
 
         Ok(instruction)
@@ -431,7 +474,8 @@ impl RaydiumSwapBuilder {
         debug!("Estimating swap output for Raydium pool: {}", pool_short_id);
 
         // Get pool info
-        let pool_info = self.pool_registry
+        let pool_info = self
+            .pool_registry
             .get_pool(pool_short_id)
             .ok_or_else(|| anyhow::anyhow!("Pool {} not found", pool_short_id))?;
 

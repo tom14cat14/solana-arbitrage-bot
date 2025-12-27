@@ -6,12 +6,12 @@
 // - Result: More bundles land within 200-300ms arbitrage window
 
 use anyhow::Result;
+use prost_types::Timestamp;
 use solana_sdk::transaction::Transaction;
 use std::time::SystemTime;
 use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::Request;
-use tracing::{info, warn, debug, error};
-use prost_types::Timestamp;
+use tracing::{debug, error, info, warn};
 
 // Include generated protobuf code
 pub mod searcher {
@@ -55,10 +55,12 @@ impl JitoGrpcClient {
         info!("   Primary endpoint: {}", endpoints[0]);
 
         // Connect to primary endpoint
-        let channel = Self::connect_to_endpoint(&endpoints[0]).await.map_err(|e| {
-            error!("❌ gRPC connection failed: {:?}", e);
-            e
-        })?;
+        let channel = Self::connect_to_endpoint(&endpoints[0])
+            .await
+            .map_err(|e| {
+                error!("❌ gRPC connection failed: {:?}", e);
+                e
+            })?;
         let client = SearcherServiceClient::new(channel);
 
         Ok(Self {
@@ -108,9 +110,8 @@ impl JitoGrpcClient {
             .iter()
             .map(|tx| {
                 // Serialize transaction
-                let data = bincode::serialize(tx)
-                    .expect("Failed to serialize transaction");
-                let data_len = data.len() as u64;  // Capture length before move
+                let data = bincode::serialize(tx).expect("Failed to serialize transaction");
+                let data_len = data.len() as u64; // Capture length before move
 
                 packet::Packet {
                     data,
@@ -166,7 +167,7 @@ impl JitoGrpcClient {
                             .iter()
                             .map(|tx| {
                                 let data = bincode::serialize(tx).unwrap();
-                                let data_len = data.len() as u64;  // Capture length before move
+                                let data_len = data.len() as u64; // Capture length before move
                                 packet::Packet {
                                     data,
                                     meta: Some(packet::Meta {
@@ -226,7 +227,11 @@ impl JitoGrpcClient {
     pub async fn subscribe_bundle_results(&mut self) -> Result<()> {
         let request = Request::new(searcher::SubscribeBundleResultsRequest {});
 
-        let mut stream = self.client.subscribe_bundle_results(request).await?.into_inner();
+        let mut stream = self
+            .client
+            .subscribe_bundle_results(request)
+            .await?
+            .into_inner();
 
         info!("📡 Subscribed to bundle results stream");
 

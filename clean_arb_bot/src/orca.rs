@@ -8,16 +8,13 @@
 // (Orca v5 requires Solana 1.19+, we use 1.18)
 
 use anyhow::{Context, Result};
-use solana_sdk::{
-    instruction::Instruction,
-    pubkey::Pubkey,
-};
+use solana_sdk::{instruction::Instruction, pubkey::Pubkey};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use crate::types::SwapParams;
-use crate::rpc_client::SolanaRpcClient;
 use crate::pool_registry::PoolRegistry;
+use crate::rpc_client::SolanaRpcClient;
+use crate::types::SwapParams;
 
 /// Orca swap instruction builder (supports Whirlpools + Legacy)
 pub struct OrcaSwapBuilder {
@@ -37,10 +34,7 @@ impl OrcaSwapBuilder {
     pub const LEGACY_PROGRAM_ID: &'static str = "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP";
 
     /// Create new Orca swap builder
-    pub fn new(
-        rpc_client: Arc<SolanaRpcClient>,
-        pool_registry: Arc<PoolRegistry>,
-    ) -> Result<Self> {
+    pub fn new(rpc_client: Arc<SolanaRpcClient>, pool_registry: Arc<PoolRegistry>) -> Result<Self> {
         let program_id = Self::WHIRLPOOLS_PROGRAM_ID
             .parse()
             .context("Failed to parse Orca Whirlpools program ID")?;
@@ -71,15 +65,25 @@ impl OrcaSwapBuilder {
         swap_params: &SwapParams,
         user_pubkey: &Pubkey,
     ) -> Result<Instruction> {
-        debug!("Building Orca Whirlpool swap instruction for pool: {}", pool_short_id);
+        debug!(
+            "Building Orca Whirlpool swap instruction for pool: {}",
+            pool_short_id
+        );
 
         // Step 1: Resolve pool address from short ID
-        let pool_address = self.pool_registry
+        let pool_address = self
+            .pool_registry
             .resolve_pool_address(pool_short_id, &crate::types::DexType::OrcaWhirlpools)
             .await
-            .context(format!("Failed to resolve pool address for {}", pool_short_id))?;
+            .context(format!(
+                "Failed to resolve pool address for {}",
+                pool_short_id
+            ))?;
 
-        debug!("✅ Resolved pool {} to address: {}", pool_short_id, pool_address);
+        debug!(
+            "✅ Resolved pool {} to address: {}",
+            pool_short_id, pool_address
+        );
 
         // GROK GHOST POOL SOLUTION - STEP 3: Early validation check (should be cached from arbitrage engine)
         // This is a safety fallback - normally pools are validated before execution
@@ -87,36 +91,43 @@ impl OrcaSwapBuilder {
         // MARKET CHAOS MODE - Skip ghost pool validation for speed
         let skip_ghost_pool_check = std::env::var("SKIP_GHOST_POOL_CHECK")
             .unwrap_or_else(|_| "false".to_string())
-            .to_lowercase() == "true";
+            .to_lowercase()
+            == "true";
 
-        if !skip_ghost_pool_check {
+        if !skip_ghost_pool_check
+            && self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true)
+        {
+            // Rare case: validate on-demand if not cached
+            warn!(
+                "⚠️ Pool {} not in cache, validating on-demand",
+                pool_short_id
+            );
+            self.pool_registry
+                .validate_pools_batch(&[pool_short_id.to_string()])
+                .await?;
+
+            // Double-check after validation
             if self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true) {
-                // Rare case: validate on-demand if not cached
-                warn!("⚠️ Pool {} not in cache, validating on-demand", pool_short_id);
-                self.pool_registry.validate_pools_batch(&[pool_short_id.to_string()]).await?;
-
-                // Double-check after validation
-                if self.pool_registry.is_pool_valid_cached(pool_short_id).await != Some(true) {
-                    return Err(anyhow::anyhow!(
-                        "⚠️ Ghost pool detected: {} (failed validation)",
-                        pool_short_id
-                    ));
-                }
+                return Err(anyhow::anyhow!(
+                    "⚠️ Ghost pool detected: {} (failed validation)",
+                    pool_short_id
+                ));
             }
         }
 
         debug!("✅ Pool validated (cached), proceeding to fetch state");
 
         // Get pool info for token mints and reserves
-        let pool_info = self.pool_registry
-            .get_pool(pool_short_id)
-            .ok_or_else(|| anyhow::anyhow!(
+        let pool_info = self.pool_registry.get_pool(pool_short_id).ok_or_else(|| {
+            anyhow::anyhow!(
                 "Pool {} resolved but info not cached. This shouldn't happen.",
                 pool_short_id
-            ))?;
+            )
+        })?;
 
         // Step 2: Fetch pool state from blockchain
-        let pool_state = self.fetch_pool_state(&pool_address)
+        let pool_state = self
+            .fetch_pool_state(&pool_address)
             .context("Failed to fetch pool state")?;
 
         debug!("✅ Got pool state ({} bytes)", pool_state.len());
@@ -143,7 +154,8 @@ impl OrcaSwapBuilder {
 
         // Extract critical data from pool state
         let tick_spacing_bytes = &pool_state[72..74];
-        let tick_spacing = u16::from_le_bytes([tick_spacing_bytes[0], tick_spacing_bytes[1]]) as i32;
+        let tick_spacing =
+            u16::from_le_bytes([tick_spacing_bytes[0], tick_spacing_bytes[1]]) as i32;
 
         let token_vault_a = Pubkey::try_from(&pool_state[138..170])
             .context("Failed to parse token vault A pubkey from pool state")?;
@@ -189,7 +201,10 @@ impl OrcaSwapBuilder {
         let mut setup_instructions = Vec::new();
 
         if !self.rpc_client.account_exists(&user_token_in)? {
-            info!("🔧 Creating associated token account for input token: {}", user_token_in);
+            info!(
+                "🔧 Creating associated token account for input token: {}",
+                user_token_in
+            );
 
             let token_mint = if swap_params.swap_a_to_b {
                 &pool_info.token_a_mint
@@ -197,19 +212,23 @@ impl OrcaSwapBuilder {
                 &pool_info.token_b_mint
             };
 
-            let create_ata_ix = spl_associated_token_account::instruction::create_associated_token_account(
-                user_pubkey,      // Payer
-                user_pubkey,      // Owner of new account
-                token_mint,       // Token mint
-                &spl_token::id(), // Token program ID
-            );
+            let create_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account(
+                    user_pubkey,      // Payer
+                    user_pubkey,      // Owner of new account
+                    token_mint,       // Token mint
+                    &spl_token::id(), // Token program ID
+                );
 
             setup_instructions.push(create_ata_ix);
             info!("✅ ATA creation instruction added - account will be created in transaction");
         }
 
         if !self.rpc_client.account_exists(&user_token_out)? {
-            info!("🔧 Creating associated token account for output token: {}", user_token_out);
+            info!(
+                "🔧 Creating associated token account for output token: {}",
+                user_token_out
+            );
 
             let token_mint = if swap_params.swap_a_to_b {
                 &pool_info.token_b_mint
@@ -217,12 +236,13 @@ impl OrcaSwapBuilder {
                 &pool_info.token_a_mint
             };
 
-            let create_ata_ix = spl_associated_token_account::instruction::create_associated_token_account(
-                user_pubkey,      // Payer
-                user_pubkey,      // Owner of new account
-                token_mint,       // Token mint
-                &spl_token::id(), // Token program ID
-            );
+            let create_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account(
+                    user_pubkey,      // Payer
+                    user_pubkey,      // Owner of new account
+                    token_mint,       // Token mint
+                    &spl_token::id(), // Token program ID
+                );
 
             setup_instructions.push(create_ata_ix);
             info!("✅ ATA creation instruction added for output - account will be created in transaction");
@@ -231,7 +251,12 @@ impl OrcaSwapBuilder {
         // Step 5: Derive tick array addresses (FIXED 2025-10-11)
         // Orca Whirlpools uses 3 tick arrays to handle price movements during swap
         // Each tick array covers 88 ticks (TICK_ARRAY_SIZE constant in Whirlpools program)
-        let tick_arrays = Self::derive_tick_arrays(&pool_address, tick_current_index, tick_spacing, &self.program_id);
+        let tick_arrays = Self::derive_tick_arrays(
+            &pool_address,
+            tick_current_index,
+            tick_spacing,
+            &self.program_id,
+        );
 
         debug!("Tick Array 0: {}", tick_arrays[0]);
         debug!("Tick Array 1: {}", tick_arrays[1]);
@@ -255,19 +280,36 @@ impl OrcaSwapBuilder {
         all_instructions.push(instruction);
 
         if all_instructions.len() > 1 {
-            info!("✅ Built {} instructions ({} setup + 1 swap)", all_instructions.len(), all_instructions.len() - 1);
+            info!(
+                "✅ Built {} instructions ({} setup + 1 swap)",
+                all_instructions.len(),
+                all_instructions.len() - 1
+            );
         } else {
             info!("✅ Built Orca Whirlpool swap instruction");
         }
         info!("   Pool: {}", pool_address);
         info!("   Amount in: {} lamports", swap_params.amount_in);
-        info!("   Min amount out: {} lamports", swap_params.minimum_amount_out);
-        info!("   Direction: {}", if swap_params.swap_a_to_b { "A→B" } else { "B→A" });
+        info!(
+            "   Min amount out: {} lamports",
+            swap_params.minimum_amount_out
+        );
+        info!(
+            "   Direction: {}",
+            if swap_params.swap_a_to_b {
+                "A→B"
+            } else {
+                "B→A"
+            }
+        );
 
         // CRITICAL FIX: For now, we need to return a single instruction
         // But we should log a warning if we're dropping ATA creation instructions
         if all_instructions.len() > 1 {
-            warn!("⚠️ CRITICAL: Dropping {} ATA creation instructions!", all_instructions.len() - 1);
+            warn!(
+                "⚠️ CRITICAL: Dropping {} ATA creation instructions!",
+                all_instructions.len() - 1
+            );
             warn!("   This will cause transaction failures if ATAs don't exist");
             warn!("   TODO: Update function signature to return Vec<Instruction>");
         }
@@ -324,11 +366,8 @@ impl OrcaSwapBuilder {
             program_id,
         );
 
-        let tick_array_current = Self::derive_tick_array_pda(
-            whirlpool,
-            current_array_start_index,
-            program_id,
-        );
+        let tick_array_current =
+            Self::derive_tick_array_pda(whirlpool, current_array_start_index, program_id);
 
         let tick_array_next = Self::derive_tick_array_pda(
             whirlpool,
@@ -462,7 +501,10 @@ impl OrcaSwapBuilder {
             data,
         };
 
-        debug!("Built Orca Whirlpool instruction with {} accounts", instruction.accounts.len());
+        debug!(
+            "Built Orca Whirlpool instruction with {} accounts",
+            instruction.accounts.len()
+        );
         debug!("Instruction data length: {} bytes", instruction.data.len());
 
         Ok(instruction)
@@ -478,7 +520,8 @@ impl OrcaSwapBuilder {
         debug!("Estimating swap output for Orca pool: {}", pool_short_id);
 
         // Get pool info
-        let pool_info = self.pool_registry
+        let pool_info = self
+            .pool_registry
             .get_pool(pool_short_id)
             .ok_or_else(|| anyhow::anyhow!("Pool {} not found", pool_short_id))?;
 

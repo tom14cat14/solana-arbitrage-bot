@@ -20,11 +20,7 @@ BACKOFF_MAX=300 # Max backoff in seconds (5 minutes)
 # Create log directory if it doesn't exist
 mkdir -p "$LOG_DIR"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Color codes removed - not used in this script (SC2034)
 
 # Logging function
 log() {
@@ -63,7 +59,7 @@ check_restart_limits() {
         restart_count=$(cat "$RESTART_COUNT_FILE")
     fi
 
-    if [ $restart_count -ge $MAX_RESTARTS_PER_HOUR ]; then
+    if [ "$restart_count" -ge "$MAX_RESTARTS_PER_HOUR" ]; then
         log "🚨 CRASH LOOP DETECTED - Engaging killswitch"
         log "   $restart_count restarts in the last hour (max: $MAX_RESTARTS_PER_HOUR)"
         touch "$KILLSWITCH_FILE"
@@ -87,7 +83,7 @@ calculate_backoff() {
     # Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s, max 300s
     local backoff=$((BACKOFF_BASE * (2 ** restart_count)))
 
-    if [ $backoff -gt $BACKOFF_MAX ]; then
+    if [ "$backoff" -gt "$BACKOFF_MAX" ]; then
         backoff=$BACKOFF_MAX
     fi
 
@@ -151,22 +147,23 @@ start_bot() {
 monitor_bot() {
     local pid=$1
     local consecutive_success=0
-    local last_health_check=$(date +%s)
+    local last_health_check
+    last_health_check=$(date +%s)
 
     log "👁️ Monitoring bot PID: $pid"
 
     while true; do
         # Check if process is still running
-        if ! kill -0 $pid 2>/dev/null; then
+        if ! kill -0 "$pid" 2>/dev/null; then
             log "⚠️ Bot process died (PID: $pid)"
 
             # Check exit code if available
-            wait $pid
+            wait "$pid"
             exit_code=$?
             log "   Exit code: $exit_code"
 
             # Clean restart if exit was clean (0) or signal (130 = Ctrl+C)
-            if [ $exit_code -eq 0 ] || [ $exit_code -eq 130 ]; then
+            if [ "$exit_code" -eq 0 ] || [ "$exit_code" -eq 130 ]; then
                 log "✅ Clean exit detected"
                 echo "0" > "$RESTART_COUNT_FILE"
                 break
@@ -177,7 +174,7 @@ monitor_bot() {
             backoff=$(calculate_backoff)
 
             log "⏱️ Waiting ${backoff}s before restart (exponential backoff)..."
-            sleep $backoff
+            sleep "$backoff"
 
             # Restart
             start_bot
@@ -207,14 +204,14 @@ monitor_bot() {
         # Check for killswitch every 5 seconds
         if [ -f "$KILLSWITCH_FILE" ]; then
             log "🛑 Killswitch detected - stopping bot"
-            kill $pid 2>/dev/null || true
+            kill "$pid" 2>/dev/null || true
             break
         fi
 
         # Check for emergency stop file
         if [ -f "$BOT_DIR/.emergency_stop" ]; then
             log "🚨 Emergency stop file detected - stopping bot"
-            kill $pid 2>/dev/null || true
+            kill "$pid" 2>/dev/null || true
             rm -f "$BOT_DIR/.emergency_stop"
             break
         fi

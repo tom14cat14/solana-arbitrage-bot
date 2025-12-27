@@ -3,7 +3,7 @@
 # Shows only important events
 
 LOG_DIR="/home/tom14cat14/Arb_Bot/clean_arb_bot/logs"
-LATEST_LOG=$(ls -t "$LOG_DIR"/live_trading_*.log 2>/dev/null | head -1)
+LATEST_LOG=$(find "$LOG_DIR" -name "live_trading_*.log" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
 
 if [ -z "$LATEST_LOG" ]; then
     echo "No log file found. Bot not started yet?"

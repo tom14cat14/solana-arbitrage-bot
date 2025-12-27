@@ -1,37 +1,37 @@
 // Common types for DEX swap operations
 
+use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
-use serde::{Serialize, Deserialize};
 
 /// Type of DEX
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DexType {
     // Meteora variants
-    MeteoraDammV1,  // Meteora DAMM V1 (older version)
-    MeteoraDammV2,  // Meteora DAMM V2 (newer version)
-    MeteoraDlmm,    // Meteora Dynamic Liquidity Market Maker
+    MeteoraDammV1, // Meteora DAMM V1 (older version)
+    MeteoraDammV2, // Meteora DAMM V2 (newer version)
+    MeteoraDlmm,   // Meteora Dynamic Liquidity Market Maker
 
     // Orca variants
     OrcaWhirlpools, // Orca Whirlpools (concentrated liquidity)
     OrcaLegacy,     // Orca Legacy (older AMM)
 
     // Raydium variants (all use same program family)
-    RaydiumAmmV4,   // Raydium AMM V4 (main AMM)
-    RaydiumClmm,    // Raydium Concentrated Liquidity
-    RaydiumCpmm,    // Raydium Constant Product Market Maker
-    RaydiumStable,  // Raydium Stable Swap
+    RaydiumAmmV4,  // Raydium AMM V4 (main AMM)
+    RaydiumClmm,   // Raydium Concentrated Liquidity
+    RaydiumCpmm,   // Raydium Constant Product Market Maker
+    RaydiumStable, // Raydium Stable Swap
 
     // Other DEXes
-    PumpSwap,       // Post-migration Pump.fun tokens
-    Jupiter,        // Jupiter Aggregator
-    Serum,          // Serum Order Book DEX
-    Aldrin,         // Aldrin AMM
-    Saros,          // Saros AMM
-    Crema,          // Crema Finance
-    Cropper,        // Cropper Finance
-    Lifinity,       // Lifinity AMM
-    Fluxbeam,       // Fluxbeam DEX
-    HumidiFi,       // Dark pool/proprietary AMM - highest volume DEX on Solana
+    PumpSwap, // Post-migration Pump.fun tokens
+    Jupiter,  // Jupiter Aggregator
+    Serum,    // Serum Order Book DEX
+    Aldrin,   // Aldrin AMM
+    Saros,    // Saros AMM
+    Crema,    // Crema Finance
+    Cropper,  // Cropper Finance
+    Lifinity, // Lifinity AMM
+    Fluxbeam, // Fluxbeam DEX
+    HumidiFi, // Dark pool/proprietary AMM - highest volume DEX on Solana
 }
 
 /// Pool information
@@ -51,7 +51,7 @@ pub struct SwapParams {
     pub amount_in: u64,
     pub minimum_amount_out: u64,
     pub expected_amount_out: Option<u64>, // Expected output for slippage validation
-    pub swap_a_to_b: bool, // true = A→B, false = B→A
+    pub swap_a_to_b: bool,                // true = A→B, false = B→A
 }
 
 impl DexType {
@@ -102,7 +102,6 @@ impl DexType {
             Ok(DexType::Fluxbeam)
         } else if dex_str.starts_with("HumidiFi") || dex_str.starts_with("Humidifi") {
             Ok(DexType::HumidiFi)
-
         } else {
             Err(anyhow::anyhow!("Unknown DEX type: {}", dex_str))
         }
@@ -112,7 +111,8 @@ impl DexType {
 /// Extract short pool ID from DEX string
 pub fn extract_pool_id(dex_str: &str) -> anyhow::Result<String> {
     let parts: Vec<&str> = dex_str.split('_').collect();
-    parts.last()
+    parts
+        .last()
         .map(|s| s.to_string())
         .ok_or_else(|| anyhow::anyhow!("Invalid DEX string format: {}", dex_str))
 }

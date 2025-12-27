@@ -21,7 +21,7 @@ echo "   Wallet: $WALLET"
 
 # Try to check balance (will show command to run manually if solana CLI not available)
 if command -v solana &> /dev/null; then
-    BALANCE=$(solana balance $WALLET 2>/dev/null || echo "0")
+    BALANCE=$(solana balance "$WALLET" 2>/dev/null || echo "0")
     echo "   Balance: $BALANCE"
 
     # Parse balance (remove "SOL" and convert to number)
@@ -43,7 +43,7 @@ else
     echo "   ⚠️  Check balance manually at:"
     echo "       https://solscan.io/account/$WALLET"
     echo ""
-    read -p "Confirm wallet has at least 0.1 SOL (y/n): " confirm
+    read -r -p "Confirm wallet has at least 0.1 SOL (y/n): " confirm
     if [[ $confirm != "y" ]]; then
         echo "Aborted. Fund wallet first."
         exit 1
@@ -103,7 +103,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-read -p "Type 'GO LIVE' to confirm you understand the risks: " confirm
+read -r -p "Type 'GO LIVE' to confirm you understand the risks: " confirm
 
 if [[ $confirm != "GO LIVE" ]]; then
     echo ""

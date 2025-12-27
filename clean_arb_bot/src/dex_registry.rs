@@ -23,40 +23,103 @@ impl DexRegistry {
         // DEX configurations: (name, program_id, fee_rate, supports_arb, min_liquidity)
         let configs = vec![
             // Raydium
-            ("Raydium", "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", 0.0025, true, 1_000_000),
-            ("Raydium_CLMM", "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK", 0.0025, true, 1_000_000),
-            ("Raydium_CPMM", "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C", 0.0025, true, 1_000_000),
-
+            (
+                "Raydium",
+                "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+                0.0025,
+                true,
+                1_000_000,
+            ),
+            (
+                "Raydium_CLMM",
+                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+                0.0025,
+                true,
+                1_000_000,
+            ),
+            (
+                "Raydium_CPMM",
+                "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+                0.0025,
+                true,
+                1_000_000,
+            ),
             // Orca
-            ("Orca", "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc", 0.003, true, 5_000_000),
-
+            (
+                "Orca",
+                "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+                0.003,
+                true,
+                5_000_000,
+            ),
             // Jupiter
-            ("Jupiter", "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", 0.001, true, 0),
-
+            (
+                "Jupiter",
+                "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+                0.001,
+                true,
+                0,
+            ),
             // Meteora
-            ("Meteora", "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo", 0.003, true, 2_000_000),
-
+            (
+                "Meteora",
+                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
+                0.003,
+                true,
+                2_000_000,
+            ),
             // Serum
-            ("Serum", "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", 0.0022, true, 10_000_000),
-
+            (
+                "Serum",
+                "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+                0.0022,
+                true,
+                10_000_000,
+            ),
             // PumpSwap (migrated tokens)
-            ("PumpSwap", "GMk6j2defJhS7F194toqmJNFNhAkbDXhYJo5oR3Rpump", 0.003, true, 100_000),
-
+            (
+                "PumpSwap",
+                "GMk6j2defJhS7F194toqmJNFNhAkbDXhYJo5oR3Rpump",
+                0.003,
+                true,
+                100_000,
+            ),
             // Others
-            ("Aldrin", "AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6", 0.003, true, 1_000_000),
-            ("Lifinity", "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S", 0.0025, true, 2_000_000),
-            ("Crema", "6MLxLqiXaaSUpkgMnWDTuejNZEz3kE7k2woyHGVFw319", 0.003, true, 1_000_000),
+            (
+                "Aldrin",
+                "AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6",
+                0.003,
+                true,
+                1_000_000,
+            ),
+            (
+                "Lifinity",
+                "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S",
+                0.0025,
+                true,
+                2_000_000,
+            ),
+            (
+                "Crema",
+                "6MLxLqiXaaSUpkgMnWDTuejNZEz3kE7k2woyHGVFw319",
+                0.003,
+                true,
+                1_000_000,
+            ),
         ];
 
         for (name, program_id, fee_rate, supports_arb, min_liquidity) in configs {
             if supports_arb {
-                dexs.insert(name.to_string(), DexInfo {
-                    name: name.to_string(),
-                    program_id: program_id.to_string(),
-                    fee_rate,
-                    supports_arbitrage: supports_arb,
-                    min_liquidity_threshold: min_liquidity,
-                });
+                dexs.insert(
+                    name.to_string(),
+                    DexInfo {
+                        name: name.to_string(),
+                        program_id: program_id.to_string(),
+                        fee_rate,
+                        supports_arbitrage: supports_arb,
+                        min_liquidity_threshold: min_liquidity,
+                    },
+                );
             }
         }
 
